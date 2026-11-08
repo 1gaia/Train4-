@@ -14,11 +14,34 @@ namespace LineFour.Oido.EditorTools
     {
         const string Folder="Assets/OidoLine4";
         const string SceneFile=Folder+"/Oido_Run.unity";
+        const string StartupSceneKey = "LineFour.Oido.StartupSceneInitialized";
         const string StartRequest="Library/AnsanLine_Upgrade.request";
         const string VerifyRequest="Library/AnsanLine_Verify.request";
         const string Report="Library/AnsanLine_Result.txt";
         static int verificationStage;
-        static Line4Setup() {EditorApplication.update+=Poll;}
+        static Line4Setup()
+        {
+            EditorApplication.update += Poll;
+            if (!Application.isBatchMode && string.IsNullOrEmpty(EditorUserSettings.GetConfigValue(StartupSceneKey)))
+                EditorApplication.delayCall += OpenStartupScene;
+        }
+
+        static void OpenStartupScene()
+        {
+            if (EditorApplication.isPlayingOrWillChangePlaymode || SceneManager.sceneCount != 1) return;
+
+            var scene = SceneManager.GetActiveScene();
+            if (!scene.IsValid() || !scene.isLoaded) return;
+
+            if (string.IsNullOrEmpty(scene.path) && !scene.isDirty)
+            {
+                if (!AssetDatabase.LoadAssetAtPath<SceneAsset>(SceneFile)) return;
+                if (!EditorSceneManager.OpenScene(SceneFile).isLoaded) return;
+            }
+
+            EditorUserSettings.SetConfigValue(StartupSceneKey, "1");
+        }
+
         static void Poll()
         {
             if(EditorApplication.isCompiling || EditorApplication.isUpdating) return;
