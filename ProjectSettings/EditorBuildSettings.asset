@@ -6,9 +6,9 @@ EditorBuildSettings:
   serializedVersion: 2
   m_Scenes:
   - enabled: 1
-    path: Assets/OidoLine4/Oido_Run.unity
+    path: Assets/Scene/Oido_Run.unity
     guid: 316e25c8280e43b46a12057b45931cd1
   - enabled: 1
-    path: Assets/Line4Drive/Line4_Run.unity
+    path: Assets/Scene/Line4_Run.unity
     guid: 48dadef8eed928a4fb9dd040a9b17458
   m_configObjects: {}

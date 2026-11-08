@@ -1,0 +1,1685 @@
+===== Assets/Line4Drive/Editor/Line4Environment.cs =====
+using UnityEngine;
+using UnityEditor;
+using UnityEngine.Rendering;
+using System.Collections.Generic;
+using System.Linq;
+using System;
+
+namespace LineFour.EditorTools
+{
+    internal sealed class SubwayGeometry
+    {
+        readonly List<Vector3> vertices=new List<Vector3>();
+        readonly List<Vector3> normals=new List<Vector3>();
+        readonly Dictionary<int,List<int>> faces=new Dictionary<int,List<int>>();
+        readonly Material[] paints;
+        readonly string meshFolder;
+        static readonly Vector3[] axes={Vector3.right,Vector3.up,Vector3.forward};
+        public SubwayGeometry(Material[] materials,string directory) {paints=materials;meshFolder=directory;}
+        public void Box(float x,float y,float z,float sx,float sy,float sz,int mat)
+        {
+            var center=new Vector3(x,y,z);var half=new Vector3(sx,sy,sz)*.5f;
+            if(!faces.TryGetValue(mat,out var triangles)) faces.Add(mat,triangles=new List<int>());
+            for(int i=0;i<3;i++) for(int sign=-1;sign<=1;sign+=2)
+            {
+                var n=axes[i]*sign; var origin=center+Vector3.Scale(n,half);
+                var u=Vector3.Scale(axes[(i+1)%3],half);var v=Vector3.Scale(axes[(i+2)%3],half)*sign;
+                int first=vertices.Count;
+                vertices.Add(origin-u-v);vertices.Add(origin+u-v);vertices.Add(origin+u+v);vertices.Add(origin-u+v);
+                for(int j=0;j<4;j++) normals.Add(n);
+                triangles.Add(first);triangles.Add(first+1);triangles.Add(first+2);
+                triangles.Add(first);triangles.Add(first+2);triangles.Add(first+3);
+            }
+        }
+        public void Flush(Transform parent,string label)
+        {
+            if(vertices.Count==0)return;
+            var mesh=new Mesh {name=label,indexFormat=vertices.Count>65535?IndexFormat.UInt32:IndexFormat.UInt16};
+            mesh.SetVertices(vertices);mesh.SetNormals(normals);
+            int[] slots=faces.Keys.OrderBy(k=>k).ToArray();mesh.subMeshCount=slots.Length;
+            for(int i=0;i<slots.Length;i++) mesh.SetTriangles(faces[slots[i]],i,false);
+            mesh.RecalculateBounds();
+            AssetDatabase.CreateAsset(mesh,meshFolder+"/"+label+".asset");
+            var g=new GameObject(label,typeof(MeshFilter),typeof(MeshRenderer));g.transform.SetParent(parent,false);
+            g.GetComponent<MeshFilter>().sharedMesh=mesh;
+            var renderer=g.GetComponent<MeshRenderer>();renderer.sharedMaterials=slots.Select(i=>paints[i]).ToArray();
+            renderer.shadowCastingMode=ShadowCastingMode.Off;
+            vertices.Clear();normals.Clear();faces.Clear();
+        }
+    }
+
+    internal static class Line4Environment
+    {
+        // Concrete, track bed, steel, sleepers, ivory tiles, line blue, tactile yellow,
+        // luminaire, charcoal trim, platform surface, wood seat, safety signal green.
+        static readonly string[] Colors={"47565D","393B40","A7B1B7","655853","D5DEDA","008FC1",
+            "EFB94A","FFEDC1","192D38","A6B0AF","A8794E","5AFFA0"};
+        static readonly string[] Names={"Concrete","Ballast","Rail steel","Sleepers","Tile","Line 4","Tactile",
+            "Warm lighting","Enamel","Platform","Bench","Signal"};
+        public static Material[] Palette(string folder)
+        {
+            var result=new Material[Colors.Length];
+            for(int i=0;i<result.Length;i++)
+            {
+                ColorUtility.TryParseHtmlString("#"+Colors[i],out var color);
+                var m=new Material(Shader.Find("Standard")) {name=Names[i],color=color};
+                m.SetFloat("_Glossiness",i==2?.55f:.19f);
+                if(i==2)m.SetFloat("_Metallic",.46f);
+                if(i==7||i==11) {m.EnableKeyword("_EMISSION");m.SetColor("_EmissionColor",color*.85f);}
+                AssetDatabase.CreateAsset(m,folder+"/"+Names[i]+".mat");result[i]=m;
+            }
+            return result;
+        }
+        static Transform Group(string name,Transform parent)
+        {
+            var g=new GameObject(name);g.transform.SetParent(parent,false);return g.transform;
+        }
+        static void Sign(Transform parent,string text,Vector3 point, float yaw,float height)
+        {
+            var g=new GameObject(text,typeof(TextMesh));g.transform.SetParent(parent,false);
+            g.transform.SetPositionAndRotation(point,Quaternion.Euler(0,yaw,0));
+            var tm=g.GetComponent<TextMesh>();tm.font=Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            tm.text=text;tm.anchor=TextAnchor.MiddleCenter;tm.alignment=TextAlignment.Center;
+            tm.fontSize=72;tm.characterSize=height/6;tm.color=Color.white;
+            g.GetComponent<MeshRenderer>().sharedMaterial=tm.font.material;
+        }
+        public static void Build(Transform root,string folder)
+        {
+            var g=new SubwayGeometry(Palette(folder),folder);
+            var tracks=Group("Standard gauge double track",root);
+            for(int from=-260;from<1220;from+=40)
+            {
+                float z=from+20;
+                g.Box(2.65f,-.48f,z,12.6f,.36f,40,0);
+                foreach(float x in new[]{0f,5.3f})
+                {
+                    g.Box(x,-.22f,z,3.22f,.22f,40,1);
+                    for(float sleeper=from+.34f;sleeper<from+40;sleeper+=.68f)
+                        g.Box(x,-.02f,sleeper,2.43f,.17f,.23f,3);
+                    foreach(float rail in new[]{x-.75f,x+.75f})
+                    {
+                        g.Box(rail,.085f,z,.143f,.04f,40,2);
+                        g.Box(rail,.145f,z,.035f,.085f,40,2);
+                        g.Box(rail,.205f,z,.065f,.045f,40,2);
+                    }
+                }
+                g.Flush(tracks,"Track_"+(from+260).ToString("0000"));
+            }
+            var tunnel=Group("Tunnel and service walkways",root);
+            float start=-260;
+            foreach(float stop in RunState.Stops)
+            {
+                Tube(g,tunnel,start,stop-212); start=stop+26;
+            }
+            Tube(g,tunnel,start,1220);
+            string[] stationNames={"HYEHWA","DONGDAEMUN","DONGDAEMUN HISTORY & CULTURE PARK"};
+            for(int i=0;i<RunState.Stops.Length;i++)
+            {
+                float stop=RunState.Stops[i],center=stop-93;
+                var station=Group((420+i)+" "+stationNames[i],root);
+                g.Box(2.65f,6.33f,center,24.8f,.45f,238,0);
+                foreach(int side in new[]{-1,1})
+                {
+                    float track=side<0?0:5.3f;
+                    float edge=track+side*1.64f,wall=track+side*9.1f;
+                    g.Box(edge+side*3.72f,.5f,center,7.44f,1.48f,238,9);
+                    g.Box(edge+side*.31f,1.25f,center,.42f,.035f,238,6);
+                    g.Box(edge+side*.04f,1.259f,center,.07f,.02f,238,4);
+                    g.Box(wall,3.66f,center,.26f,5.05f,238,4);
+                    g.Box(wall-side*.15f,2.85f,center,.07f,.29f,238,5);
+                    g.Box(wall-side*.15f,1.43f,center,.07f,.22f,238,8);
+                    g.Box(track+side*3.18f,5.77f,center,.32f,.13f,237,7);
+                    for(float z=stop-206;z<stop+24;z+=12)
+                    {
+                        float col=track+side*6.05f;
+                        g.Box(col,3.63f,z,.54f,4.78f,.70f,4);
+                        g.Box(col,1.56f,z,.58f,.64f,.74f,8);
+                        g.Box(col,3.15f,z,.57f,.23f,.73f,5);
+                        g.Box(wall-side*.14f,3.74f,z,.035f,4.8f,.035f,0);
+                        g.Box(col,5.9f,z,6.25f,.3f,.4f,9);
+                    }
+                    for(float z=stop-184;z<stop+24;z+=40)
+                    {
+                        float x=track+side*6.75f;
+                        g.Box(x,1.75f,z,.58f,.14f,3,10);
+                        g.Box(x+side*.25f,2.01f,z,.12f,.55f,3,10);
+                        foreach(float dz in new[]{-.96f,.96f})g.Box(x,1.5f,z+dz,.4f,.48f,.15f,8);
+                        float bx=wall-side*.21f;
+                        g.Box(bx,3.57f,z,.16f,1.18f,9.4f,8);
+                        Sign(station,(420+i)+"   /   "+stationNames[i],new Vector3(bx-side*.093f,3.56f,z),side<0?-90:90,.25f);
+                    }
+                }
+                g.Box(-1.93f,1.91f,stop,.09f,1.4f,.09f,2);
+                g.Box(-1.93f,2.66f,stop,.47f,.43f,.1f,6);
+                Sign(station,"10",new Vector3(-1.93f,2.66f,stop-.06f),0,.20f);
+                g.Flush(station,"Platform_"+(420+i));
+            }
+        }
+        static void Tube(SubwayGeometry g,Transform parent,float from,float to)
+        {
+            while(from<to)
+            {
+                float len=Mathf.Min(50,to-from),z=from+len/2;
+                g.Box(2.65f,5.92f,z,15.4f,.40f,len,0);
+                foreach(float x in new[]{-4.95f,10.25f})
+                {
+                    int inward=x<0?1:-1;
+                    g.Box(x,2.68f,z,.3f,6.1f,len,0);
+                    g.Box(x+inward*.6f,.48f,z,1.24f,.37f,len,9);
+                    g.Box(x+inward*.22f,1.54f,z,.12f,.11f,len,8);
+                    for(float at=from+2;at<to && at<from+len;at+=8)
+                    {
+                        g.Box(x+inward*.19f,2.75f,at,.12f,.19f,1.85f,7);
+                        g.Box(x+inward*.22f,3.05f,at+1,.18f,5.64f,.21f,8);
+                    }
+                }
+                if(len>30) {
+                    g.Box(2.53f,1.75f,z,.12f,2.9f,.12f,2);
+                    g.Box(2.53f,3.1f,z,.44f,.83f,.25f,8);
+                    g.Box(2.53f,3.26f,z-.14f,.17f,.17f,.04f,11);
+                }
+                g.Flush(parent,"Tunnel_"+Mathf.RoundToInt(from+260).ToString("0000")); from+=len;
+            }
+        }
+    }
+}
+
+
+===== Assets/Line4Drive/Editor/Line4Setup.cs =====
+using UnityEngine;
+using UnityEditor;
+using UnityEditor.SceneManagement;
+using UnityEngine.SceneManagement;
+using UnityEngine.Rendering;
+using System;
+using System.IO;
+using System.Linq;
+
+namespace LineFour.EditorTools
+{
+    [InitializeOnLoad]
+    internal static class Line4Setup
+    {
+        const string Folder="Assets/Line4Drive";
+        const string SceneFile=Folder+"/Line4_Run.unity";
+        const string StartRequest="Library/Line4_Create.request";
+        const string VerifyRequest="Library/Line4_Verify.request";
+        const string Report="Library/Line4_Result.txt";
+        static Line4Setup() {EditorApplication.update+=Poll;}
+        static void Poll()
+        {
+            if(EditorApplication.isCompiling || EditorApplication.isUpdating) return;
+            if(File.Exists(StartRequest) && !EditorApplication.isPlayingOrWillChangePlaymode) {
+                File.Delete(StartRequest);
+                try { Build(); } catch(Exception e) {File.AppendAllText(Report,"ERROR "+e+"\n");Debug.LogException(e);}
+            }
+            if(File.Exists(VerifyRequest) && EditorApplication.isPlaying && Time.frameCount>12)
+            {
+                var sim=UnityEngine.Object.FindFirstObjectByType<Line4Drive>();
+                if(!sim || !sim.cabCamera.isActiveAndEnabled || sim.consist.GetComponentsInChildren<LODGroup>().Length!=10) return;
+                File.Delete(VerifyRequest);
+                ScreenCapture.CaptureScreenshot(Path.GetFullPath("Library/Line4_Play.png"));
+                File.AppendAllText(Report,"PLAY_OK frame="+Time.frameCount+" camera="+sim.cabCamera.transform.position+"\n");
+            }
+        }
+        static void Require(bool value,string message) { if(!value) throw new InvalidOperationException(message); }
+        static void TestControls()
+        {
+            var r=new RunState();
+            r.Service();Require(!r.Doors,"station interlock");
+            for(int i=0;i<150;i++)r.Step(.02f,true,false,false);
+            Require(r.Speed>2 && r.Distance>2,"traction");
+            for(int i=0;i<150;i++)r.Step(.02f,false,false,true);
+            Require(r.Stopped,"emergency brake");
+            for(int target=1;target<3;target++) {
+                r.Distance=RunState.Stops[target]-1;r.Service();Require(r.Doors,"open");
+                r.Service();Require(r.Doors,"dwell interlock");r.Step(3.1f,true,false,false);
+                Require(r.Stopped,"traction interlock");r.Service();Require(r.Served==target,"serve");
+            }
+            Require(r.Complete,"terminus");r.RestartSection();Require(r.Target==1 && r.Distance==0,"replay");
+        }
+        static Renderer Level(Transform root,string name) =>
+            root.GetComponentsInChildren<MeshRenderer>(true).FirstOrDefault(r=>r.name==name);
+        static void Build()
+        {
+            File.WriteAllText(Report,"Starting scene creation\n");
+            Require(!File.Exists(SceneFile),"Generated scene already exists");
+            TestControls();
+            var source=AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Line4_Unity.fbx");
+            var atlas=AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/Line4_Palette.png");
+            Require(source && atlas,"Train FBX or palette missing");
+            // Preserve all open scenes before switching to the driving scene.
+            for(int i=0;i<SceneManager.sceneCount;i++) {
+                var old=SceneManager.GetSceneAt(i);
+                if(old.isDirty) {
+                    string saved=string.IsNullOrEmpty(old.path)?AssetDatabase.GenerateUniqueAssetPath(Folder+"/Previous_Untitled.unity"):
+                        AssetDatabase.GenerateUniqueAssetPath(Folder+"/Previous_"+old.name+".unity");
+                    Require(EditorSceneManager.SaveScene(old,saved,true),"Could not preserve "+old.name);
+                    File.AppendAllText(Report,"Prior scene saved to "+saved+"\n");
+                }
+            }
+            var scene=EditorSceneManager.NewScene(NewSceneSetup.EmptyScene,NewSceneMode.Single);
+            string data=AssetDatabase.GenerateUniqueAssetPath(Folder+"/RouteAssets");
+            AssetDatabase.CreateFolder(Folder,Path.GetFileName(data));
+            var game=new GameObject("Line 4 | Route operation"); var sim=game.AddComponent<Line4Drive>();
+            var consist=new GameObject("4054 | Ten-car consist").transform;sim.consist=consist;
+            var train=(GameObject)PrefabUtility.InstantiatePrefab(source,scene);
+            PrefabUtility.UnpackPrefabInstance(train,PrefabUnpackMode.Completely,InteractionMode.AutomatedAction);
+            train.transform.SetParent(consist,false);
+            var front=Level(train.transform,"Car_4054_LOD0");var rear=Level(train.transform,"Car_4954_LOD0");
+            Require(front && rear,"Could not identify cab cars: "+string.Join(", ",train.GetComponentsInChildren<MeshRenderer>().Take(6).Select(r=>r.name)));
+            var forward=front.bounds.center-rear.bounds.center;forward.y=0;
+            train.transform.rotation=Quaternion.FromToRotation(forward.normalized,Vector3.forward)*train.transform.rotation;
+            var b=front.bounds;
+            Require(b.size.z>18 && b.size.z<23 && b.size.x>2.9f && b.size.x<4,"Unexpected car dimensions "+b.size);
+            train.transform.position+=new Vector3(-b.center.x,.228f-b.min.y,-b.max.z);
+            File.AppendAllText(Report,"Cab dimensions "+b.size+"; nose "+front.bounds.max+"\n");
+            foreach(var group in train.GetComponentsInChildren<LODGroup>(true))UnityEngine.Object.DestroyImmediate(group);
+            for(int i=0;i<10;i++)
+            {
+                string name="Car_"+(4054+100*i);
+                var car=train.GetComponentsInChildren<Transform>(true).First(t=>t.name==name);
+                var group=car.gameObject.AddComponent<LODGroup>();
+                var levels=new LOD[3];
+                for(int lod=0;lod<3;lod++) {
+                    var r=Level(car,name+"_LOD"+lod);Require(r,"LOD mesh missing "+name);
+                    r.enabled=true;r.gameObject.SetActive(true);r.shadowCastingMode=ShadowCastingMode.Off;
+                    levels[lod]=new LOD(new[]{.17f,.055f,.004f}[lod],new[]{r});
+                }
+                group.SetLODs(levels);group.RecalculateBounds();
+            }
+            var remaps=new System.Collections.Generic.Dictionary<Material,Material>();
+            foreach(var r in train.GetComponentsInChildren<MeshRenderer>(true)) {
+                var slots=r.sharedMaterials;
+                for(int i=0;i<slots.Length;i++) {
+                    var original=slots[i]; if(!original)continue;
+                    if(!remaps.TryGetValue(original,out var m)){
+                        m=new Material(Shader.Find("Standard")){name=original.name,mainTexture=atlas,color=Color.white};
+                        m.SetFloat("_Glossiness",.30f);
+                        if(original.name.IndexOf("Glass",StringComparison.OrdinalIgnoreCase)>=0) {
+                            m.SetFloat("_Mode",3);m.SetOverrideTag("RenderType","Transparent");
+                            m.SetInt("_SrcBlend",(int)BlendMode.One);m.SetInt("_DstBlend",(int)BlendMode.OneMinusSrcAlpha);
+                            m.SetInt("_ZWrite",0);m.EnableKeyword("_ALPHAPREMULTIPLY_ON");m.renderQueue=3000;
+                            m.color=new Color(1,1,1,.27f);
+                        }
+                        AssetDatabase.CreateAsset(m,data+"/Train "+original.name+".mat");remaps.Add(original,m);
+                    }
+                    slots[i]=m;
+                }
+                r.sharedMaterials=slots;
+            }
+            Line4Environment.Build(new GameObject("Hyehwa - Dongdaemun - DDP").transform,data);
+            var camera=new GameObject("Driving camera",typeof(Camera),typeof(AudioListener));
+            camera.tag="MainCamera";sim.cabCamera=camera.GetComponent<Camera>();sim.cabCamera.nearClipPlane=.055f;
+            sim.cabCamera.farClipPlane=285;sim.cabCamera.fieldOfView=65;
+            sim.cabCamera.clearFlags=CameraClearFlags.SolidColor;sim.cabCamera.backgroundColor=new Color(.105f,.15f,.18f);
+            camera.transform.position=new Vector3(-4.65f,2.8f,9.5f);
+            camera.transform.LookAt(new Vector3(0,1.9f,-3.5f));
+            var light=new GameObject("Tunnel illumination").AddComponent<Light>();
+            light.type=LightType.Directional;light.intensity=1.03f; light.color=new Color(.97f,.96f,.9f);
+            light.transform.rotation=Quaternion.Euler(41,-27,0);light.shadows=LightShadows.None;
+            RenderSettings.ambientMode=AmbientMode.Flat;RenderSettings.ambientLight=new Color(.60f,.66f,.70f);
+            RenderSettings.fog=true;RenderSettings.fogMode=FogMode.ExponentialSquared;
+            RenderSettings.fogColor=sim.cabCamera.backgroundColor;RenderSettings.fogDensity=.008f;
+            Require(EditorSceneManager.SaveScene(scene,SceneFile),"Saving route scene failed");
+            if(EditorBuildSettings.scenes.Length==0)EditorBuildSettings.scenes=new[]{new EditorBuildSettingsScene(SceneFile,true)};
+            AssetDatabase.SaveAssets();Selection.activeObject=null;
+            if(SceneView.lastActiveSceneView)SceneView.lastActiveSceneView.LookAt(new Vector3(0,2,-5),camera.transform.rotation,15);
+            File.AppendAllText(Report,"SCENE_OK "+SceneFile+"; 10 LOD groups; 3 platforms; controls test passed\n");
+            File.WriteAllText(VerifyRequest,"play");
+            EditorApplication.ExecuteMenuItem("Window/General/Game");
+            EditorApplication.isPlaying=true;
+        }
+    }
+}
+
+
+===== Assets/Line4Drive/Line4Drive.cs =====
+using UnityEngine;
+
+namespace LineFour
+{
+    public sealed class RunState
+    {
+        public static readonly float[] Stops = { 0, 540, 1130 };
+        public static readonly string[] Names = { "혜화", "동대문", "동대문역사문화공원" };
+        public float Distance, Speed, Dwell;
+        public int Target = 1, Served;
+        public bool Doors, Complete;
+        public bool InZone => Mathf.Abs(Stops[Target] - Distance) <= 4;
+        public bool Stopped => Speed < 0.01f;
+
+        public void Step(float dt, bool power, bool brake, bool emergency)
+        {
+            if (Complete) return;
+            if (Doors) { Dwell += dt; return; }
+            float previous = Speed;
+            float acceleration = emergency ? -2.15f : brake ? -1.23f :
+                power ? Mathf.Lerp(1.02f, 0.48f, Speed / 18) : -0.09f;
+            Speed = Mathf.Clamp(Speed + acceleration * dt, 0, 18);
+            Distance += (previous + Speed) * 0.5f * dt;
+            if (Distance >= Stops[Target] + 26) { Distance = Stops[Target] + 26; Speed = 0; }
+        }
+
+        public void Service()
+        {
+            if (Complete || !Stopped || !InZone) return;
+            if (!Doors) { Doors = true; Dwell = 0; return; }
+            if (Dwell < 3) return;
+            Doors = false;
+            Served = Target;
+            Complete = Target == Stops.Length - 1;
+            if (!Complete) Target++;
+        }
+
+        public void RestartSection()
+        {
+            if (Complete) { Served = 0; Target = 1; }
+            Distance = Stops[Served]; Speed = 0; Dwell = 0; Doors = false; Complete = false;
+        }
+    }
+
+    public sealed class Line4Drive : MonoBehaviour
+    {
+        public Transform consist;
+        public Camera cabCamera;
+        public float cabEyeZ = -1.7f;
+        public readonly RunState run = new RunState();
+        public int View { get; private set; }
+        private Vector3 origin;
+        private Font font;
+        private GUIStyle style;
+        private AudioSource rolling, chime;
+        private bool power, brake, emergency;
+        private static readonly Color Ink = new Color(.035f,.09f,.13f,.95f);
+        private static readonly Color Blue = new Color(.18f,.78f,.96f);
+        private static readonly Color Pale = new Color(.72f,.83f,.87f);
+
+        void Start()
+        {
+            origin = consist.position;
+            font = Font.CreateDynamicFontFromOSFont(new[] {"Malgun Gothic","Apple SD Gothic Neo","Noto Sans CJK KR","Arial"}, 24);
+            rolling = gameObject.AddComponent<AudioSource>(); chime = gameObject.AddComponent<AudioSource>();
+            rolling.clip = MakeSound(false); rolling.loop = true; rolling.volume=0; rolling.Play();
+            chime.clip = MakeSound(true); chime.volume=.3f;
+            UpdateCamera();
+        }
+
+        AudioClip MakeSound(bool bell)
+        {
+            const int rate = 22050;
+            float[] samples = new float[rate];
+            for (int i=0;i<rate;i++)
+            {
+                float t=(float)i/rate;
+                if (bell) {
+                    float local=t<.35f?t:t-.35f, hz=t<.35f?660:880;
+                    samples[i]=.4f*Mathf.Sin(2*Mathf.PI*hz*local)*Mathf.Exp(-7*local)*Mathf.Clamp01(local*140);
+                } else {
+                    samples[i]=.34f*Mathf.Sin(2*Mathf.PI*68*t)+.12f*Mathf.Sin(2*Mathf.PI*136*t)
+                        +.11f*Mathf.Sin(2*Mathf.PI*343*t)*Mathf.Pow(.5f+.5f*Mathf.Cos(2*Mathf.PI*4*t),12);
+                }
+            }
+            var clip=AudioClip.Create(bell?"Platform chime":"Traction loop", rate,1,rate,false);
+            clip.SetData(samples,0); return clip;
+        }
+
+        void Update()
+        {
+            if (Input.GetKeyDown(KeyCode.C)) View=(View+1)%3;
+            if (Input.GetKeyDown(KeyCode.R)) run.RestartSection();
+            if (Input.GetKeyDown(KeyCode.E)) {
+                bool was=run.Doors; run.Service(); if(was!=run.Doors) chime.Play();
+            }
+            power=Input.GetKey(KeyCode.W)||Input.GetKey(KeyCode.UpArrow);
+            brake=Input.GetKey(KeyCode.S)||Input.GetKey(KeyCode.DownArrow);
+            emergency=Input.GetKey(KeyCode.Space);
+            run.Step(Time.deltaTime,power,brake,emergency);
+            consist.position=origin+Vector3.forward*run.Distance;
+            rolling.volume=.17f*run.Speed/18; rolling.pitch=.48f+run.Speed*.08f;
+            UpdateCamera();
+        }
+
+        void UpdateCamera()
+        {
+            Vector3 nose=Vector3.forward*run.Distance;
+            Vector3 eye, aim;
+            if (View==1) { eye=new Vector3(.57f,2.73f,cabEyeZ); aim=eye+new Vector3(0,-.035f,1)*25; }
+            else if (View==2) { eye=new Vector3(0,2.52f,-5.4f); aim=eye+new Vector3(0,-.02f,-1)*12; }
+            else { eye=new Vector3(-4.65f,2.8f,9.5f); aim=new Vector3(0,1.9f,-3.5f); }
+            cabCamera.transform.SetPositionAndRotation(nose+eye,Quaternion.LookRotation(aim-eye));
+        }
+
+        void RectColor(float x,float y,float w,float h,Color c)
+        {
+            GUI.color=c; GUI.DrawTexture(new Rect(x,y,w,h),Texture2D.whiteTexture); GUI.color=Color.white;
+        }
+        void Label(float x,float y,float w,float h,string msg,int size,Color color,bool bold=false)
+        {
+            style.fontSize=size; style.fontStyle=bold?FontStyle.Bold:FontStyle.Normal; style.normal.textColor=color;
+            GUI.Label(new Rect(x,y,w,h),msg,style);
+        }
+        void OnGUI()
+        {
+            if (Event.current.type!=EventType.Repaint) return;
+            if(style==null) style=new GUIStyle(GUI.skin.label){font=font,alignment=TextAnchor.MiddleLeft,padding=new RectOffset()};
+            float s=Mathf.Min(Screen.width/1200f,Screen.height/680f), w=Screen.width/s, h=Screen.height/s;
+            Matrix4x4 saved=GUI.matrix; GUI.matrix=Matrix4x4.Scale(new Vector3(s,s,1));
+            float remaining=RunState.Stops[run.Target]-run.Distance;
+            RectColor(24,22,262,64,Ink); RectColor(24,22,5,64,Blue);
+            Label(43,24,220,22,"SEOUL METRO   /   LINE 04",13,Blue,true);
+            Label(43,44,225,34,"4호선  ·  하행 운전",22,Color.white,true);
+            RectColor(w-360,22,336,64,Ink);
+            Label(w-343,25,108,22,run.Complete?"운행 종료":"다음 정차역",13,Blue,true);
+            Label(w-343,44,225,31,RunState.Names[run.Target],21,Color.white,true);
+            Label(w-120,43,93,30,Mathf.RoundToInt(Mathf.Abs(remaining))+" m",19,Pale);
+            string action = run.Complete?"운행 완료   ·   R  다시 운전":run.Doors?
+                (run.Dwell<3?"승하차 중   "+Mathf.CeilToInt(3-run.Dwell)+"초":"E  문 닫고 승하차 완료"):
+                remaining < -4?"정차 위치 통과   ·   R  구간 재시작":
+                run.InZone && run.Stopped?"정위치 정차   ·   E  문 열기":
+                remaining <= run.Speed*run.Speed/2.46f+12?"정차 지점 접근   ·   S  제동":
+                run.Distance<2?"W  길게 눌러 출발":"정차 표지 ±4 m 이내에 정차";
+            RectColor(24,h-112,433,88,Ink); RectColor(24,h-112,433,3,Blue);
+            Label(43,h-101,83,55,Mathf.RoundToInt(run.Speed*3.6f).ToString("00"),38,Color.white,true);
+            Label(104,h-92,73,34,"km/h",15,Pale);
+            Label(178,h-103,260,34,action,15,Color.white,true);
+            Label(178,h-70,250,26,emergency?"비상 제동":run.Doors?"출입문 열림":brake?"제동":power?"가속":"타행 / 대기",14,Blue);
+            RectColor(43,h-44,113,4,new Color(.23f,.32f,.37f)); RectColor(43,h-44,113*run.Speed/18,4,Blue);
+            RectColor(w-442,h-97,418,73,Ink);
+            Label(w-425,h-94,397,31,"W 가속     S 제동     Space 비상 제동     E 승하차",15,Color.white,true);
+            Label(w-425,h-61,397,26,"C 시점  ·  "+new[]{"선두 외부","운전석","객실"}[View]+"       R 구간 재시작",15,Pale);
+            GUI.matrix=saved;
+        }
+    }
+}
+
+
+===== Assets/OidoLine4/Editor/JinjeopBuild.cs =====
+using System;
+using System.IO;
+using System.Linq;
+using System.Collections.Generic;
+using UnityEditor;
+using UnityEditor.SceneManagement;
+using UnityEngine;
+using UnityEngine.SceneManagement;
+using Object=UnityEngine.Object;
+
+namespace LineFour.Oido.EditorTools
+{
+    [InitializeOnLoad] internal static class JinjeopBuild
+    {
+        const string Folder="Assets/OidoLine4";
+        const string Trigger="Library/Line4_51.request", Verify="Library/Line4_51.verify", Report="Library/Line4_51.txt";
+        static int stage,frame;
+        static JinjeopBuild(){EditorApplication.update+=Poll;}
+        static void Check(bool ok,string why){if(!ok)throw new InvalidOperationException(why);}
+        static void Poll()
+        {
+            if(EditorApplication.isCompiling||EditorApplication.isUpdating)return;
+            try{
+                if(File.Exists(Trigger)){
+                    if(EditorApplication.isPlaying){EditorApplication.isPlaying=false;return;}
+                    if(EditorApplication.isPlayingOrWillChangePlaymode)return;
+                    File.Delete(Trigger);Build();return;
+                }
+                if(File.Exists(Verify)&&EditorApplication.isPlaying&&Time.frameCount>15)PlayCheck();
+            }catch(Exception e){if(File.Exists(Verify))File.Delete(Verify);File.AppendAllText(Report,"FAIL "+e+"\n");Debug.LogException(e);}
+        }
+        static void ScoreTests()
+        {
+            var r=new RunState();
+            for(int i=0;i<RunState.Stops.Length;i++){
+                float error=i==1?2:i==2?-4:0;
+                r.Distance=RunState.Stops[i]+error;r.Speed=0;
+                r.Step(.1f,true,false,false);Check(r.Stopped,"Mandatory station stop");
+                int before=r.Score;r.Service();r.Step(1.7f,true,false,false);r.Service();
+                Check(r.Score==before+25 && r.Phase==DoorPhase.Boarding,"Open bonus once");
+                r.RestartSection();Check(r.Doors,"No duplicate boarding reward on retry");
+                r.Step(3.1f,true,false,false);r.Service();r.Step(1.9f,true,false,false);
+                Check(r.Served==i&&r.Score-before==350-Mathf.RoundToInt(Mathf.Abs(error)*25),"Score at "+i);
+            }
+            Check(r.Complete,"Terminus");r.RestartSection();Check(r.Score==0,"New run clears score");
+            r.Target=1;r.Served=0;r.Distance=RunState.Stops[1]+3.99f;r.Speed=6;
+            r.Step(.1f,false,false,false);r.Step(.1f,false,false,false);r.Service();
+            Check(r.Score==-100&&r.Misses==1&&r.Missed&&!r.Doors,"Single skip debit");
+            r.RestartSection();Check(r.Target==1 && r.Score==-100 && r.Distance==RunState.Stops[1]-24,"Mandatory reapproach");
+        }
+        static float[] DoorCenters(Line4Drive sim)
+        {
+            var result=new List<float>();var mesh=new Mesh();
+            for(int car=0;car<10;car++){
+                int i=car*3;var r=sim.doorCars[i];int shape=sim.platformShapes[i];
+                r.SetBlendShapeWeight(shape,0);r.BakeMesh(mesh);var a=mesh.vertices;
+                r.SetBlendShapeWeight(shape,100);r.BakeMesh(mesh);var b=mesh.vertices;r.SetBlendShapeWeight(shape,0);
+                var samples=new List<float>();
+                for(int j=0;j<a.Length;j++){
+                    var start=r.transform.TransformPoint(a[j]);var finish=r.transform.TransformPoint(b[j]);
+                    if(Mathf.Abs(start.z-finish.z)>.4f && start.x<0)samples.Add(start.z);
+                }
+                samples.Sort();int begin=0,number=0;
+                for(int j=1;j<=samples.Count;j++)if(j==samples.Count||samples[j]-samples[j-1]>1.25f){
+                    result.Add((samples[begin]+samples[j-1])*.5f);begin=j;number++;
+                }
+                Check(number==4,"Passenger door alignment on car "+car+": "+number);
+            }
+            Object.DestroyImmediate(mesh);return result.OrderByDescending(z=>z).ToArray();
+        }
+        static void CopyAt(Transform template,Transform parent,float delta,string name){
+            var g=Object.Instantiate(template.gameObject,parent);g.name=name;g.transform.position=template.position+Vector3.forward*delta;
+        }
+        static void Extend(Transform root,Transform old,string folder)
+        {
+            var materials=Line4Environment.Palette(folder);
+            var g=new SubwayGeometry(materials,folder);
+            float end=RunState.Stops.Last()+150;
+            var track=old.Find("Standard gauge double track/Track_0000");
+            var outside=old.Find("Ansan Line | Open alignment/Wayside_0000");Check(track&&outside,"Existing reusable track");
+            for(int z=8580;z<end;z+=40)CopyAt(track,root,z+260,"Track "+z);
+            // 80 m trackside modules use shared meshes. Station throats have their own wider opening.
+            Transform tube=null;
+            for(int z=8620;z<end;z+=80){
+                int next=Array.FindIndex(RunState.Stops,s=>s+26>=z+40);if(next<0)next=RunState.Stops.Length-1;
+                if(!RouteSchedule.Tunnel(next)){CopyAt(outside,root,z+260,"Wayside "+z);continue;}
+                if(tube==null){
+                    g.Box(2.65f,-.55f,40,27,.3f,80,0);
+                    foreach(float x in new[]{-10.6f,15.9f}){
+                        g.Box(x,3.25f,40,.42f,7.9f,80,0);
+                        for(int l=4;l<80;l+=12)g.Box(x+(x<0?.24f:-.24f),3.12f,l,.12f,.2f,2.1f,7);
+                    }
+                    g.Soffit(-10.8f,16.1f,7.4f,0,80,0);
+                    g.Flush(root,"TunnelShared");tube=root.Find("TunnelShared");tube.position=Vector3.forward*z;
+                }else CopyAt(tube,root,z-tube.position.z,"Tunnel "+z);
+            }
+            Line4Environment.Stations(g,root,folder,14);
+        }
+        static void Build()
+        {
+            File.WriteAllText(Report,"Beginning 51-stop service verification\n");ScoreTests();
+            var scene=SceneManager.GetActiveScene();Check(scene.path==Folder+"/Oido_Run.unity","Open Oido_Run");
+            var sim=Object.FindFirstObjectByType<Line4Drive>();Check(sim,"Driving controller");
+            var old=scene.GetRootGameObjects().First(o=>o.name=="Oido - Geumjeong").transform;
+            sim.passengerDoors=DoorCenters(sim);sim.passengerFabric=AssetDatabase.LoadAssetAtPath<Shader>(Folder+"/PassengerFabric.shader");
+            Check(sim.passengerFabric && sim.passengerFabric.isSupported,"Passenger shader");
+            var root=scene.GetRootGameObjects().FirstOrDefault(o=>o.name=="Geumjeong - Jinjeop");
+            if(!root){
+                string data=AssetDatabase.GenerateUniqueAssetPath(Folder+"/JinjeopStations");
+                AssetDatabase.CreateFolder(Folder,Path.GetFileName(data));root=new GameObject("Geumjeong - Jinjeop");
+                try{Extend(root.transform,old,data);}catch{Object.DestroyImmediate(root);throw;}
+            }
+            for(int i=0;i<51;i++){
+                string id=RouteSchedule.Ids[i].ToString();
+                var station=(i<14?old:root.transform).Cast<Transform>().Single(t=>t.name.StartsWith(id+" "));
+                Check(station.Find("Platform_"+id)&&station.Find("S"+id),"Missing station "+id);
+            }
+            EditorSceneManager.MarkSceneDirty(scene);Check(EditorSceneManager.SaveScene(scene),"Save");AssetDatabase.SaveAssets();
+            File.AppendAllText(Report,"SCENE_OK 51 stations, 40 real platform door centers, score boundaries 0/2/4 m, skip and retry, terminal and replay\n");
+            File.WriteAllText(Verify,"run");EditorApplication.ExecuteMenuItem("Window/General/Game");EditorApplication.isPlaying=true;
+        }
+        static void PlayCheck()
+        {
+            var sim=Object.FindFirstObjectByType<Line4Drive>();if(!sim||Time.frameCount<frame)return;
+            var flow=sim.GetComponent<PassengerFlow>();if(!flow)return;
+            if(stage==0){
+                Check(sim.Opening && flow.VisibleCount==14,"Opening with waiting passengers");sim.BeginRun();sim.CycleView();
+                Check(Mathf.Abs(sim.cabCamera.transform.position.y-3.03f)<.01f,"Raised cab");stage++;frame=Time.frameCount+2;
+            }else if(stage==1){
+                ScreenCapture.CaptureScreenshot(Path.GetFullPath("Library/Line4_RaisedCab.png"));sim.run.Service();stage++;
+            }else if(stage==2 && flow.WalkingCount>0){
+                Check(sim.run.Score==25,"Live boarding bonus");stage++;
+            }else if(stage==3 && sim.run.Dwell>=3){
+                sim.run.Service();stage++;
+            }else if(stage==4 && sim.run.Served==0){
+                Check(sim.run.Score==350,"Live stop total");
+                sim.run.Target=50;sim.run.Served=49;sim.run.Distance=RunState.Stops[50];sim.run.Service();stage++;
+            }else if(stage==5 && flow.WalkingCount>0){
+                Check(flow.VisibleCount>=14,"Terminal alighting");stage++;
+            }else if(stage==6 && sim.run.Dwell>=3){
+                sim.run.Service();stage++;
+            }else if(stage==7 && sim.run.Complete){
+                sim.ReplayOpening();stage++;frame=Time.frameCount+3;
+            }else if(stage==8){
+                Check(sim.Opening && sim.run.Score==0 && sim.run.Target==0 && sim.consist.position.z==0,"Fresh opening");
+                ScreenCapture.CaptureScreenshot(Path.GetFullPath("Library/Line4_Opening.png"));
+                File.Delete(Verify);File.AppendAllText(Report,"PLAY_OK title, raised cab, passenger boarding and terminal alighting, live scoring, fresh opening at 0 points.\n");
+            }
+        }
+    }
+}
+
+
+===== Assets/OidoLine4/Editor/Line4Environment.cs =====
+using UnityEngine;
+using UnityEditor;
+using UnityEngine.Rendering;
+using System.Collections.Generic;
+using System.Linq;
+using System;
+
+namespace LineFour.Oido.EditorTools
+{
+    internal sealed class SubwayGeometry
+    {
+        readonly List<Vector3> vertices=new List<Vector3>();
+        readonly List<Vector3> normals=new List<Vector3>();
+        readonly Dictionary<int,List<int>> faces=new Dictionary<int,List<int>>();
+        readonly Material[] paints;
+        readonly string meshFolder;
+        static readonly Vector3[] axes={Vector3.right,Vector3.up,Vector3.forward};
+        public SubwayGeometry(Material[] materials,string directory) {paints=materials;meshFolder=directory;}
+        public void Box(float x,float y,float z,float sx,float sy,float sz,int mat, Quaternion? rotation=null)
+        {
+            var center=new Vector3(x,y,z);var half=new Vector3(sx,sy,sz)*.5f;
+            if(!faces.TryGetValue(mat,out var triangles)) faces.Add(mat,triangles=new List<int>());
+            for(int i=0;i<3;i++) for(int sign=-1;sign<=1;sign+=2)
+            {
+                var q=rotation??Quaternion.identity;
+                var n=q*(axes[i]*sign); var origin=center+n*half[i];
+                var u=q*Vector3.Scale(axes[(i+1)%3],half);var v=q*Vector3.Scale(axes[(i+2)%3],half)*sign;
+                int first=vertices.Count;
+                vertices.Add(origin-u-v);vertices.Add(origin+u-v);vertices.Add(origin+u+v);vertices.Add(origin-u+v);
+                for(int j=0;j<4;j++) normals.Add(n);
+                triangles.Add(first);triangles.Add(first+1);triangles.Add(first+2);
+                triangles.Add(first);triangles.Add(first+2);triangles.Add(first+3);
+            }
+        }
+        public void Beam(Vector3 a,Vector3 b,float width,float depth,int mat)
+        {
+            Vector3 mid=(a+b)*.5f;
+            Box(mid.x,mid.y,mid.z,width,depth,(b-a).magnitude,mat,Quaternion.FromToRotation(Vector3.forward,(b-a).normalized));
+        }
+        public void Soffit(float left,float right,float y,float start,float end,int mat)
+        {
+            if(!faces.TryGetValue(mat,out var tris))faces.Add(mat,tris=new List<int>());
+            int n=vertices.Count;
+            vertices.AddRange(new[]{new Vector3(left,y,start),new Vector3(right,y,start),new Vector3(right,y,end),new Vector3(left,y,end)});
+            for(int i=0;i<4;i++)normals.Add(Vector3.down);
+            tris.AddRange(new[]{n,n+1,n+2,n,n+2,n+3});
+        }
+        public void Flush(Transform parent,string label)
+        {
+            if(vertices.Count==0)return;
+            var mesh=new Mesh {name=label,indexFormat=vertices.Count>65535?IndexFormat.UInt32:IndexFormat.UInt16};
+            mesh.SetVertices(vertices);mesh.SetNormals(normals);
+            int[] slots=faces.Keys.OrderBy(k=>k).ToArray();mesh.subMeshCount=slots.Length;
+            for(int i=0;i<slots.Length;i++) mesh.SetTriangles(faces[slots[i]],i,false);
+            mesh.RecalculateBounds();
+            var reusable=(label.StartsWith("Track_")||label.StartsWith("Wayside_"))?
+                AssetDatabase.LoadAssetAtPath<Mesh>("Assets/OidoLine4/RouteAssets/"+label+".asset"):null;
+            if(reusable) { UnityEngine.Object.DestroyImmediate(mesh); mesh=reusable; }
+            else AssetDatabase.CreateAsset(mesh,meshFolder+"/"+label+".asset");
+            var g=new GameObject(label,typeof(MeshFilter),typeof(MeshRenderer));g.transform.SetParent(parent,false);
+            g.GetComponent<MeshFilter>().sharedMesh=mesh;
+            var renderer=g.GetComponent<MeshRenderer>();renderer.sharedMaterials=slots.Select(i=>paints[i]).ToArray();
+            renderer.shadowCastingMode=ShadowCastingMode.Off;
+            vertices.Clear();normals.Clear();faces.Clear();
+        }
+    }
+
+    internal static class Line4Environment
+    {
+        // Concrete, track bed, steel, sleepers, ivory tiles, line blue, tactile yellow,
+        // luminaire, charcoal trim, platform surface, wood seat, safety signal green.
+        static readonly string[] Colors={"47565D","393B40","A7B1B7","655853","D5DEDA","008FC1",
+            "EFB94A","FFEDC1","192D38","A6B0AF","A8794E","5AFFA0","86966E","677F56","97ADBA","B6A9A1",
+            "A4634D","367B88","647B95","BF9963","687D73","6C5264","3F6677","798F94"};
+        static readonly string[] Names={"Concrete","Ballast","Rail steel","Sleepers","Tile","Line 4","Tactile",
+            "Warm lighting","Enamel","Platform","Bench","Signal","Verge","Tree canopy","Factory cladding","Housing",
+            "Terracotta","Petrol blue","Slate","Ochre","Sage","Plum","Facade glass","Roof seam"};
+        public static Material[] Palette(string folder)
+        {
+            var result=new Material[Colors.Length];
+            for(int i=0;i<result.Length;i++)
+            {
+                ColorUtility.TryParseHtmlString("#"+Colors[i],out var color);
+                var m=new Material(Shader.Find("Standard")) {name=Names[i],color=color};
+                m.SetFloat("_Glossiness",i==2?.55f:.19f);
+                if(i==2)m.SetFloat("_Metallic",.46f);
+                if(i==7||i==11) {m.EnableKeyword("_EMISSION");m.SetColor("_EmissionColor",color*.85f);}
+                AssetDatabase.CreateAsset(m,folder+"/"+Names[i]+".mat");result[i]=m;
+            }
+            return result;
+        }
+        static Transform Group(string name,Transform parent)
+        {
+            var g=new GameObject(name);g.transform.SetParent(parent,false);return g.transform;
+        }
+        static void Sign(Transform parent,string text,Vector3 point, float yaw,float height)
+        {
+            var g=new GameObject(text,typeof(TextMesh));g.transform.SetParent(parent,false);
+            g.transform.SetPositionAndRotation(point,Quaternion.Euler(0,yaw,0));
+            var tm=g.GetComponent<TextMesh>();tm.font=Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            tm.text=text;tm.anchor=TextAnchor.MiddleCenter;tm.alignment=TextAlignment.Center;
+            tm.fontSize=72;tm.characterSize=height/6;tm.color=Color.white;
+            g.GetComponent<MeshRenderer>().sharedMaterial=tm.font.material;
+        }
+        public static void Build(Transform root,string folder)
+        {
+            var g=new SubwayGeometry(Palette(folder),folder);
+            var tracks=Group("Standard gauge double track",root);
+            float routeEnd=RunState.Stops[RunState.Stops.Length-1]+110;
+            for(int from=-260;from<routeEnd;from+=40)
+            {
+                float z=from+20;
+                g.Box(2.65f,-.48f,z,12.6f,.36f,40,0);
+                foreach(float x in new[]{0f,5.3f})
+                {
+                    g.Box(x,-.22f,z,3.22f,.22f,40,1);
+                    for(float sleeper=from+.34f;sleeper<from+40;sleeper+=.68f)
+                        g.Box(x,-.02f,sleeper,2.43f,.17f,.23f,3);
+                    foreach(float rail in new[]{x-.75f,x+.75f})
+                    {
+                        g.Box(rail,.085f,z,.143f,.04f,40,2);
+                        g.Box(rail,.145f,z,.035f,.085f,40,2);
+                        g.Box(rail,.205f,z,.065f,.045f,40,2);
+                    }
+                }
+                g.Flush(tracks,"Track_"+(from+260).ToString("0000"));
+            }
+            var landscape=Group("Ansan Line | Open alignment",root);
+            for(int from=-260;from<routeEnd;from+=80)
+            {
+                float z=from+40;
+                g.Box(0,-1.07f,z,340,.8f,80,12);
+                for(int side=-1;side<=1;side+=2)
+                {
+                    float x=side<0?-12:17;
+                    g.Box(x,.24f,z,.23f,2.10f,80,0);
+                    for(int j=0;j<4;j++) {
+                        float site=from+7+j*18, loc=x+side*(4+j%2*3);
+                        g.Box(loc,1.05f,site,.36f,3.2f,.36f,10);
+                        g.Box(loc,3.55f,site,3.7f,3.2f,4.3f,13);
+                    }
+                    int block=(from+260)/80;
+                    float h=block%3==0?15:6+(block%4)*2;
+                    float facade=x+side*(31+block%3*4);
+                    g.Box(facade,h/2-.7f,z,17,h,26,block%2==0?14:15);
+                    for(int floor=2;floor<h;floor+=3)g.Box(facade-side*8.53f,floor,z,.07f,.9f,23,8);
+                }
+                for(int j=0;j<2;j++) {
+                    float pole=from+j*40+10;
+                    g.Box(10.2f,3.35f,pole,.20f,7.6f,.2f,2);
+                    g.Box(4.45f,6.75f,pole,11.6f,.16f,.18f,2);
+                }
+                foreach(float wire in new[]{0f,5.3f})g.Box(wire,5.65f,z,.031f,.04f,80,8);
+                g.Flush(landscape,"Wayside_"+(from+260).ToString("0000"));
+            }
+            Stations(g,root,folder,0);
+        }
+        public static void Stations(SubwayGeometry g,Transform root,string folder,int first)
+        {
+            var signs=new StationDetails(folder);
+            for(int i=first;i<RunState.Stops.Length;i++)
+            {
+                int id=RouteSchedule.Ids[i];bool tunnel=RouteSchedule.Tunnel(i);
+                float stop=RunState.Stops[i],center=stop-93;
+                var station=Group(id+" "+RouteSchedule.English[i].ToUpperInvariant(),root);
+                if(tunnel)g.Soffit(-10,15.4f,7.45f,stop-212,stop+26,0);
+                foreach(int side in new[]{-1,1})
+                {
+                    float track=side<0?0:5.3f;
+                    float edge=track+side*1.64f,wall=track+side*9.1f;
+                    g.Box(edge+side*3.72f,.5f,center,7.44f,1.48f,238,9);
+                    g.Box(edge+side*.31f,1.25f,center,.42f,.035f,238,6);
+                    g.Box(edge+side*.04f,1.259f,center,.07f,.02f,238,4);
+                    if(tunnel)g.Box(wall,4.0f,center,.33f,7.3f,238,4);
+                    else signs.Canopy(g,track,side,center,i);
+                    g.Box(wall,2.05f,center,.26f,2.15f,238,4);
+                    g.Box(wall-side*.15f,2.85f,center,.07f,.29f,238,5);
+                    g.Box(wall-side*.15f,1.43f,center,.07f,.22f,238,8);
+                    g.Box(track+side*3.18f,5.77f,center,.32f,.13f,237,7);
+                    for(float z=stop-206;z<stop+24;z+=12)
+                    {
+                        float col=track+side*6.05f;
+                        g.Box(col,3.63f,z,.54f,4.78f,.70f,4);
+                        g.Box(col,1.56f,z,.58f,.64f,.74f,8);
+                        g.Box(col,3.15f,z,.57f,.23f,.73f,5);
+                        g.Box(wall-side*.14f,3.74f,z,.035f,4.8f,.035f,0);
+                        g.Box(col,5.9f,z,6.25f,.3f,.4f,9);
+                    }
+                    for(float z=stop-184;z<stop+24;z+=40)
+                    {
+                        float x=track+side*6.75f;
+                        g.Box(x,1.75f,z,.58f,.14f,3,10);
+                        g.Box(x+side*.25f,2.01f,z,.12f,.55f,3,10);
+                        foreach(float dz in new[]{-.96f,.96f})g.Box(x,1.5f,z+dz,.4f,.48f,.15f,8);
+                        float bx=wall-side*.21f;
+                        g.Box(bx,3.57f,z,.16f,1.18f,9.4f,8);
+                        signs.Panel(station,"S"+id,new Vector3(bx-side*.093f,3.56f,z),side<0?-90:90,4.3f,1.08f);
+                    }
+                    signs.Platform(g,station,track,side,stop,i);
+                }
+                g.Box(-1.93f,1.91f,stop,.09f,1.4f,.09f,2);
+                g.Box(-1.93f,2.66f,stop,.47f,.43f,.1f,6);
+                foreach(int direction in new[]{-1,1})
+                    signs.Panel(station,"Stop10",new Vector3(-1.93f,2.66f,stop+direction*.057f),direction<0?0:180,.45f,.39f);
+                g.Flush(station,"Platform_"+id);
+            }
+        }
+    }
+}
+
+
+===== Assets/OidoLine4/Editor/Line4Setup.cs =====
+using UnityEngine;
+using UnityEditor;
+using UnityEditor.SceneManagement;
+using UnityEngine.SceneManagement;
+using UnityEngine.Rendering;
+using System;
+using System.IO;
+using System.Linq;
+
+namespace LineFour.Oido.EditorTools
+{
+    [InitializeOnLoad]
+    internal static class Line4Setup
+    {
+        const string Folder="Assets/OidoLine4";
+        const string SceneFile=Folder+"/Oido_Run.unity";
+        const string StartupSceneKey = "LineFour.Oido.StartupSceneInitialized";
+        const string StartRequest="Library/AnsanLine_Upgrade.request";
+        const string VerifyRequest="Library/AnsanLine_Verify.request";
+        const string Report="Library/AnsanLine_Result.txt";
+        static int verificationStage;
+        static Line4Setup()
+        {
+            EditorApplication.update += Poll;
+            if (!Application.isBatchMode && string.IsNullOrEmpty(EditorUserSettings.GetConfigValue(StartupSceneKey)))
+                EditorApplication.delayCall += OpenStartupScene;
+        }
+
+        static void OpenStartupScene()
+        {
+            if (EditorApplication.isPlayingOrWillChangePlaymode || SceneManager.sceneCount != 1) return;
+
+            var scene = SceneManager.GetActiveScene();
+            if (!scene.IsValid() || !scene.isLoaded) return;
+
+            if (string.IsNullOrEmpty(scene.path) && !scene.isDirty)
+            {
+                if (!AssetDatabase.LoadAssetAtPath<SceneAsset>(SceneFile)) return;
+                if (!EditorSceneManager.OpenScene(SceneFile).isLoaded) return;
+            }
+
+            EditorUserSettings.SetConfigValue(StartupSceneKey, "1");
+        }
+
+        static void Poll()
+        {
+            if(EditorApplication.isCompiling || EditorApplication.isUpdating) return;
+            if(File.Exists(StartRequest) && EditorApplication.isPlaying) {
+                EditorApplication.isPlaying=false; return;
+            }
+            if(File.Exists(StartRequest) && !EditorApplication.isPlayingOrWillChangePlaymode) {
+                File.Delete(StartRequest);
+                try { Build(); } catch(Exception e) {File.AppendAllText(Report,"ERROR "+e+"\n");Debug.LogException(e);}
+            }
+            if(File.Exists(VerifyRequest) && EditorApplication.isPlaying && Time.frameCount>12)
+            {
+                var sim=UnityEngine.Object.FindFirstObjectByType<Line4Drive>();
+                if(!sim || !sim.cabCamera.isActiveAndEnabled || sim.consist.GetComponentsInChildren<LODGroup>().Length!=10) return;
+                if(verificationStage==0) {
+                    ScreenCapture.CaptureScreenshot(Path.GetFullPath("Library/AnsanLine_Aerial.png"));
+                    Quaternion before=sim.cabCamera.transform.rotation;
+                    sim.TurnView(35,12);
+                    Require(Quaternion.Angle(before,sim.cabCamera.transform.rotation)<.01f && sim.cabCamera.transform.position.y>20,"fixed overhead");
+                    for(int view=1;view<=2;view++){
+                        sim.CycleView();var initial=sim.cabCamera.transform.rotation;sim.TurnView(35,12);
+                        Require(Quaternion.Angle(initial,sim.cabCamera.transform.rotation)>30,"interior mouse look");
+                    }
+                    sim.CycleView();sim.run.Service();verificationStage=1;
+                } else if(verificationStage==1 && sim.run.Phase==DoorPhase.Boarding && sim.run.Dwell>.2f) {
+                    for(int i=0;i<sim.doorCars.Length;i++) {
+                        var car=sim.doorCars[i];int chosen=sim.platformShapes[i];
+                        Require(car.GetBlendShapeWeight(chosen)>99 && car.GetBlendShapeWeight(1-chosen)==0,"animated platform side");
+                    }
+                    ScreenCapture.CaptureScreenshot(Path.GetFullPath("Library/Oido_Open.png"));verificationStage=2;
+                } else if(verificationStage==2 && sim.run.Dwell>3.1f) {
+                    sim.run.Service();verificationStage=3;
+                } else if(verificationStage==3 && !sim.run.Doors) {
+                    Require(sim.run.Target==1 && sim.run.Distance==0,"origin departure");
+                    sim.run.Target=13;sim.run.Served=12;sim.run.Distance=RunState.Stops[13];verificationStage=4;
+                } else if(verificationStage==4 && sim.cabCamera.transform.position.z>RunState.Stops[13]) {
+                    ScreenCapture.CaptureScreenshot(Path.GetFullPath("Library/AnsanLine_Geumjeong.png")); verificationStage=5;
+                } else if(verificationStage==5) {
+                    sim.run.Served=-1;sim.run.RestartSection();
+                    const string resume="Library/AnsanLine_resume.txt";
+                    if(File.Exists(resume)){
+                        var fields=File.ReadAllText(resume).Trim().Split(',');
+                        int served=int.Parse(fields[0]);
+                        sim.run.Served=served;sim.run.RestartSection();
+                        sim.run.Distance=Mathf.Clamp(float.Parse(fields[1],System.Globalization.CultureInfo.InvariantCulture),
+                            RunState.Stops[served],RunState.Stops[served+1]+26);
+                        File.Delete(resume);
+                    }
+                    File.Delete(VerifyRequest);
+                    File.AppendAllText(Report,"PLAY_OK aerial fixed; cab and saloon rotated; door interlocks; terminus visited; current distance "+sim.run.Distance+"\n");
+                }
+            }
+        }
+        static void Require(bool value,string message) { if(!value) throw new InvalidOperationException(message); }
+        static void TestControls()
+        {
+            var r=new RunState();
+            for(int target=0;target<RunState.Stops.Length;target++) {
+                if(target>0){
+                    for(int i=0;i<150;i++)r.Step(.02f,true,false,false);
+                    Require(r.Speed>2,"traction");r.Service();Require(!r.Doors,"moving interlock");
+                    r.Distance=RunState.Stops[target]; r.Service();Require(!r.Doors,"at platform but moving");
+                    for(int i=0;i<150;i++)r.Step(.02f,false,false,true);
+                    Require(r.Stopped,"emergency brake");
+                    r.Distance=RunState.Stops[target]+5;r.Service();Require(!r.Doors,"outside stopping zone");
+                }
+                r.Distance=RunState.Stops[target];r.Service();r.Step(.8f,true,false,false);
+                Require(r.Doors && r.DoorTravel>.45f && r.DoorTravel<.55f && r.Stopped,"opening travel");
+                r.Step(.9f,true,false,false);r.Service();Require(r.Phase==DoorPhase.Boarding,"minimum dwell");
+                r.Step(3.1f,true,false,false);r.Service();r.Step(.9f,true,false,false);
+                Require(r.Phase==DoorPhase.Closing && r.Stopped && r.Served<target,"closing interlock");
+                r.Step(1,true,false,false);Require(!r.Doors && r.Served==target,"serve");
+            }
+            Require(r.Complete,"terminus");r.RestartSection();Require(r.Target==0 && r.Distance==0,"replay");
+        }
+        static Renderer Level(Transform root,string name) =>
+            root.GetComponentsInChildren<SkinnedMeshRenderer>(true).FirstOrDefault(r=>r.name==name);
+        static int PlatformMorph(SkinnedMeshRenderer r)
+        {
+            Require(r.sharedMesh.blendShapeCount==2,"Each car requires two moving sides: "+r.name);
+            var posed=new Mesh();r.BakeMesh(posed);var closed=posed.vertices;
+            int platform=-1;
+            for(int shape=0;shape<2;shape++) {
+                r.SetBlendShapeWeight(shape,100);r.BakeMesh(posed);var opened=posed.vertices;
+                int count=0;float side=0;
+                for(int i=0;i<closed.Length;i++){
+                    if((closed[i]-opened[i]).sqrMagnitude<1e-8f)continue;
+                    var a=r.transform.TransformPoint(closed[i]);var b=r.transform.TransformPoint(opened[i]);
+                    if(Mathf.Abs(a.z-b.z)<.45f)continue;
+                    side+=a.x;count++;
+                }
+                Require(count>10,"No sliding vertices "+r.name+" #"+shape);
+                if(side/count<0) {Require(platform<0,"Both morphs on same side");platform=shape;}
+                r.SetBlendShapeWeight(shape,0);
+            }
+            UnityEngine.Object.DestroyImmediate(posed);
+            Require(platform>=0,"No platform-facing door "+r.name);return platform;
+        }
+        static void Build()
+        {
+            File.WriteAllText(Report,"Starting scene creation\n");
+            TestControls();
+            if(File.Exists(SceneFile)) { UpgradeRoute(); return; }
+            var source=AssetDatabase.LoadAssetAtPath<GameObject>(Folder+"/Line4_Sliding.fbx");
+            var atlas=AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/Line4_Palette.png");
+            Require(source && atlas,"Train FBX or palette missing");
+            // Preserve all open scenes before switching to the driving scene.
+            for(int i=0;i<SceneManager.sceneCount;i++) {
+                var old=SceneManager.GetSceneAt(i);
+                if(old.isDirty) {
+                    string saved=string.IsNullOrEmpty(old.path)?AssetDatabase.GenerateUniqueAssetPath(Folder+"/Previous_Untitled.unity"):
+                        AssetDatabase.GenerateUniqueAssetPath(Folder+"/Previous_"+old.name+".unity");
+                    Require(EditorSceneManager.SaveScene(old,saved,true),"Could not preserve "+old.name);
+                    File.AppendAllText(Report,"Prior scene saved to "+saved+"\n");
+                }
+            }
+            var scene=EditorSceneManager.NewScene(NewSceneSetup.EmptyScene,NewSceneMode.Single);
+            string data=AssetDatabase.GenerateUniqueAssetPath(Folder+"/RouteAssets");
+            AssetDatabase.CreateFolder(Folder,Path.GetFileName(data));
+            var game=new GameObject("Line 4 | Route operation"); var sim=game.AddComponent<Line4Drive>();
+            var consist=new GameObject("4054 | Ten-car consist").transform;sim.consist=consist;
+            var train=(GameObject)PrefabUtility.InstantiatePrefab(source,scene);
+            PrefabUtility.UnpackPrefabInstance(train,PrefabUnpackMode.Completely,InteractionMode.AutomatedAction);
+            train.transform.SetParent(consist,false);
+            var front=Level(train.transform,"Car_4054_LOD0");var rear=Level(train.transform,"Car_4954_LOD0");
+            Require(front && rear,"Could not identify cab cars: "+string.Join(", ",train.GetComponentsInChildren<MeshRenderer>().Take(6).Select(r=>r.name)));
+            var forward=front.bounds.center-rear.bounds.center;forward.y=0;
+            train.transform.rotation=Quaternion.FromToRotation(forward.normalized,Vector3.forward)*train.transform.rotation;
+            var b=front.bounds;
+            Require(b.size.z>18 && b.size.z<23 && b.size.x>2.9f && b.size.x<4,"Unexpected car dimensions "+b.size);
+            train.transform.position+=new Vector3(-b.center.x,.228f-b.min.y,-b.max.z);
+            File.AppendAllText(Report,"Cab dimensions "+b.size+"; nose "+front.bounds.max+"\n");
+            foreach(var group in train.GetComponentsInChildren<LODGroup>(true))UnityEngine.Object.DestroyImmediate(group);
+            sim.doorCars=new SkinnedMeshRenderer[30];sim.platformShapes=new int[30];
+            for(int i=0;i<10;i++)
+            {
+                string name="Car_"+(4054+100*i);
+                var car=train.GetComponentsInChildren<Transform>(true).First(t=>t.name==name);
+                var group=car.gameObject.AddComponent<LODGroup>();
+                var levels=new LOD[3];
+                for(int lod=0;lod<3;lod++) {
+                    var r=Level(car,name+"_LOD"+lod);Require(r,"LOD mesh missing "+name);
+                    r.enabled=true;r.gameObject.SetActive(true);r.shadowCastingMode=ShadowCastingMode.Off;
+                    var skin=(SkinnedMeshRenderer)r;sim.doorCars[3*i+lod]=skin;
+                    sim.platformShapes[3*i+lod]=PlatformMorph(skin);
+                    levels[lod]=new LOD(new[]{.17f,.055f,.004f}[lod],new[]{r});
+                }
+                group.SetLODs(levels);group.RecalculateBounds();
+            }
+            var remaps=new System.Collections.Generic.Dictionary<Material,Material>();
+            foreach(var r in train.GetComponentsInChildren<SkinnedMeshRenderer>(true)) {
+                var slots=r.sharedMaterials;
+                for(int i=0;i<slots.Length;i++) {
+                    var original=slots[i]; if(!original)continue;
+                    if(!remaps.TryGetValue(original,out var m)){
+                        m=new Material(Shader.Find("Standard")){name=original.name,mainTexture=atlas,color=Color.white};
+                        m.SetFloat("_Glossiness",.30f);
+                        if(original.name.IndexOf("Glass",StringComparison.OrdinalIgnoreCase)>=0) {
+                            m.SetFloat("_Mode",3);m.SetOverrideTag("RenderType","Transparent");
+                            m.SetInt("_SrcBlend",(int)BlendMode.One);m.SetInt("_DstBlend",(int)BlendMode.OneMinusSrcAlpha);
+                            m.SetInt("_ZWrite",0);m.EnableKeyword("_ALPHAPREMULTIPLY_ON");m.renderQueue=3000;
+                            m.color=new Color(1,1,1,.27f);
+                        }
+                        AssetDatabase.CreateAsset(m,data+"/Train "+original.name+".mat");remaps.Add(original,m);
+                    }
+                    slots[i]=m;
+                }
+                r.sharedMaterials=slots;
+            }
+            Line4Environment.Build(new GameObject("Oido - Geumjeong").transform,data);
+            var camera=new GameObject("Driving camera",typeof(Camera),typeof(AudioListener));
+            camera.tag="MainCamera";sim.cabCamera=camera.GetComponent<Camera>();sim.cabCamera.nearClipPlane=.055f;
+            sim.cabCamera.farClipPlane=285;sim.cabCamera.fieldOfView=65;
+            sim.cabCamera.clearFlags=CameraClearFlags.Skybox;sim.cabCamera.backgroundColor=new Color(.56f,.76f,.86f);
+            camera.transform.position=new Vector3(12,30,14);
+            camera.transform.LookAt(new Vector3(0,1.9f,-18));
+            var light=new GameObject("Tunnel illumination").AddComponent<Light>();
+            light.type=LightType.Directional;light.intensity=1.03f; light.color=new Color(.97f,.96f,.9f);
+            light.transform.rotation=Quaternion.Euler(41,-27,0);light.shadows=LightShadows.None;
+            RenderSettings.ambientMode=AmbientMode.Flat;RenderSettings.ambientLight=new Color(.60f,.66f,.70f);
+            RenderSettings.fog=true;RenderSettings.fogMode=FogMode.ExponentialSquared;
+            RenderSettings.fogColor=sim.cabCamera.backgroundColor;RenderSettings.fogDensity=.0035f;
+            Require(EditorSceneManager.SaveScene(scene,SceneFile),"Saving route scene failed");
+            EditorBuildSettings.scenes=new[]{new EditorBuildSettingsScene(SceneFile,true)}.Concat(EditorBuildSettings.scenes.Where(s=>s.path!=SceneFile)).ToArray();
+            AssetDatabase.SaveAssets();Selection.activeObject=null;
+            if(SceneView.lastActiveSceneView)SceneView.lastActiveSceneView.LookAt(new Vector3(0,2,-5),camera.transform.rotation,15);
+            File.AppendAllText(Report,"SCENE_OK "+SceneFile+"; 10 LOD groups; 14 stops; 30 verified platform morphs; all station interlock tests passed\n");
+            File.WriteAllText(VerifyRequest,"play");
+            EditorApplication.ExecuteMenuItem("Window/General/Game");
+            EditorApplication.isPlaying=true;
+        }
+        static void UpgradeRoute()
+        {
+            var scene=SceneManager.GetActiveScene();
+            Require(scene.path==SceneFile,"Open the Oido driving scene before the route upgrade");
+            var old=scene.GetRootGameObjects().Single(o=>o.name=="Oido - Hanyang Univ. at Ansan"||o.name=="Oido - Geumjeong");
+            var sim=UnityEngine.Object.FindFirstObjectByType<Line4Drive>();
+            Require(sim && sim.consist && sim.doorCars.Length==30,"Original consist missing");
+            string data=AssetDatabase.GenerateUniqueAssetPath(Folder+"/GeumjeongStations");
+            AssetDatabase.CreateFolder(Folder,Path.GetFileName(data));
+            var route=new GameObject("Oido - Geumjeong");
+            try {
+                Line4Environment.Build(route.transform,data);
+                for(int i=0;i<RunState.Stops.Length;i++){
+                    int id=456-i;
+                    var station=route.transform.Cast<Transform>().Single(t=>t.name.StartsWith(id+" "));
+                    Require(station.Find("Platform_"+id) && station.Find("S"+id),"Missing platform/sign "+id);
+                }
+            } catch {UnityEngine.Object.DestroyImmediate(route); throw;}
+            File.Copy(SceneFile,Path.Combine("Library","Oido_before_"+DateTime.Now.ToString("yyyyMMdd_HHmmss")+".unity"));
+            UnityEngine.Object.DestroyImmediate(old);
+            var cam=sim.cabCamera;cam.transform.position=new Vector3(12,30,14);
+            cam.transform.LookAt(new Vector3(0,1.9f,-18));
+            Require(EditorSceneManager.SaveScene(scene),"Could not save expanded route");
+            AssetDatabase.SaveAssets();
+            File.AppendAllText(Report,"SCENE_OK Oido_Run, 14 platforms and sign sets, 14 stopping cycles, existing consist retained\n");
+            File.WriteAllText(VerifyRequest,"play");verificationStage=0;
+            EditorApplication.ExecuteMenuItem("Window/General/Game");EditorApplication.isPlaying=true;
+        }
+    }
+}
+
+
+===== Assets/OidoLine4/Editor/StationDetails.cs =====
+using UnityEngine;
+using UnityEditor;
+using System.Collections.Generic;
+
+namespace LineFour.Oido.EditorTools
+{
+    internal sealed class StationDetails
+    {
+        readonly string folder;
+        readonly Dictionary<string,Material> signs=new Dictionary<string,Material>();
+        // Fascia palette and roof sections for the fourteen station art directions.
+        static readonly int[] Accent={17,18,20,16,17,21,18,16,20,19,16,20,21,18};
+        static readonly int[] Roof={1,3,0,2,3,1,2,0,1,2,0,2,3,1};
+        public StationDetails(string assetFolder) {folder=assetFolder;}
+
+        public void Panel(Transform parent,string key,Vector3 pos,float yaw,float width,float height)
+        {
+            if(!signs.TryGetValue(key,out Material mat)){
+                var texture=AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/OidoLine4/Signs/"+key+".png");
+                if(!texture)throw new System.InvalidOperationException("Station artwork missing: "+key);
+                mat=new Material(Shader.Find("Unlit/Texture")) {name=key,mainTexture=texture};
+                AssetDatabase.CreateAsset(mat,folder+"/Sign_"+key+".mat");
+                signs.Add(key,mat);
+            }
+            var panel=GameObject.CreatePrimitive(PrimitiveType.Quad);
+            Object.DestroyImmediate(panel.GetComponent<Collider>());
+            panel.name=key;panel.transform.SetParent(parent,false);
+            panel.transform.SetPositionAndRotation(pos,Quaternion.Euler(0,yaw,0));
+            panel.transform.localScale=new Vector3(width,height,1);
+            panel.GetComponent<MeshRenderer>().sharedMaterial=mat;
+        }
+        static float RoofY(int style,float u)
+        {
+            if(style==0)return 6.45f+.57f*u;
+            if(style==1)return 6.35f+.70f*Mathf.Abs(u);
+            if(style==2)return 6.4f+1.05f*(1-u*u);
+            return 6.38f+.71f*(1-Mathf.Abs(u));
+        }
+        public void Canopy(SubwayGeometry g,float track,int side,float center,int station)
+        {
+            int style=Roof[station%Roof.Length],accent=Accent[station%Accent.Length];
+            float x=track+side*5.33f;
+            const float step=1.2f;
+            for(int bay=0;bay<9;bay++){
+                float z=center+(bay-4)*22;
+                for(int strip=0;strip<6;strip++){
+                    float u=-1+strip/3f, v=u+1/3f;
+                    float a=RoofY(style,u),b=RoofY(style,v);
+                    float pitch=Mathf.Atan2((b-a)*side,step)*Mathf.Rad2Deg;
+                    g.Box(x+side*(u+v)*1.8f,(a+b)*.5f,z,Mathf.Sqrt(step*step+(b-a)*(b-a))+.025f,.17f,21.1f,
+                        strip==0?accent:14,Quaternion.Euler(0,0,pitch));
+                    g.Beam(new Vector3(x+side*u*3.6f,a-.16f,z-8),new Vector3(x+side*v*3.6f,b-.16f,z-8),.14f,.19f,8);
+                }
+                g.Box(x-side*3.6f,RoofY(style,-1)-.15f,z,.16f,.39f,21.1f,accent);
+                foreach(float arm in new[]{-2.5f,2.5f})
+                    g.Beam(new Vector3(x,4.45f,z),new Vector3(x+arm,6.25f,z),.16f,.16f,accent);
+            }
+        }
+        public void Platform(SubwayGeometry g,Transform root,float track,int side,float stop,int i)
+        {
+            int accent=Accent[i%Accent.Length];float hub=track+side*6.08f;
+            // A front-facing station name and boarding marks remain visible above the platform furniture.
+            float boardZ=stop-9;
+            foreach(float dx in new[]{-2.7f,2.7f})g.Box(hub+dx,3.3f,boardZ,.15f,4.25f,.17f,8);
+            g.Box(hub,5.08f,boardZ,6.02f,1.61f,.22f,accent);
+            foreach(int dir in new[]{-1,1})
+                Panel(root,"S"+RouteSchedule.Ids[i],new Vector3(hub,5.08f,boardZ+dir*.12f),dir<0?0:180,5.75f,1.44f);
+            for(int car=0;car<10;car++){
+                float z=stop-4.1f-car*20.48f;
+                foreach(float dz in new[]{-.8f,.8f})
+                    g.Box(track+side*2.5f,1.27f,z+dz,.92f,.021f,.095f,5);
+            }
+            // Passenger amenities along the platform, outside the door clearance.
+            for(int bank=0;bank<3;bank++){
+                float z=stop-44-bank*64;
+                g.Box(hub,2.36f,z,1.0f,2.2f,.71f,accent);
+                g.Box(hub-side*.514f,2.55f,z,.043f,.82f,.49f,8);
+                g.Box(hub-side*.544f,2.62f,z,.025f,.48f,.4f,14);
+                g.Box(hub,1.76f,z+1.7f,.52f,1f,.57f,2);
+                g.Box(hub,2.27f,z+1.7f,.46f,.035f,.49f,8);
+                g.Box(hub,4.52f,z+3,2.43f,.82f,.18f,8);
+                foreach(float dx in new[]{-.87f,.87f})g.Box(hub+dx,5.27f,z+3,.06f,.81f,.06f,2);
+                Panel(root,i==13?"Transfer":"Exit",new Vector3(hub,4.52f,z+3.105f),180,2.28f,.70f);
+            }
+            float outside=track+side*13.3f, hallZ=stop-60-(i%3)*16;
+            bool bridge=i==0||i==3||i==4||i==6||i==12||i==13;
+            if(bridge){
+                // Stair flights land flush with the passenger footbridge.
+                float deck=8.1f,landing=hallZ+8;
+                for(int step=0;step<34;step++){
+                    float rise=.20f*(step+1);
+                    g.Box(hub,1.24f+rise*.5f,landing-13.4f+step*.40f,2.12f,rise,.415f,9);
+                }
+                foreach(float dx in new[]{-1.12f,1.12f})
+                    g.Beam(new Vector3(hub+dx,2.35f,landing-13.55f),new Vector3(hub+dx,9.13f,landing),.1f,.10f,2);
+                if(side<0){
+                    g.Box(2.65f,8.02f,landing+1.3f,19.2f,.32f,3.2f,0);
+                    foreach(float dz in new[]{-.2f,2.8f}) {
+                        g.Box(2.65f,8.78f,landing+dz,19.1f,1.22f,.12f,22);
+                        for(int j=0;j<10;j++)g.Box(-6.86f+j*2.1f,9.2f,landing+dz,.10f,2.2f,.12f,accent);
+                    }
+                    g.Box(2.65f,10.43f,landing+1.3f,19.5f,.27f,3.6f,accent);
+                }
+            } else {
+                g.Box(outside,3.3f,hallZ,7.2f,6.7f,13,accent);
+                g.Box(outside,6.76f,hallZ,8.1f,.33f,14,8);
+                for(int j=0;j<5;j++)g.Box(outside-side*3.63f,3.55f,hallZ-5+j*2.4f,.07f,2.7f,1.94f,22);
+            }
+            // Distinct concourse-side landmarks for a coastal terminus, gallery, campus,
+            // greener suburban stops, and the two dense city interchanges.
+            if(i==0) {
+                for(int fin=0;fin<5;fin++){
+                    float z=stop-17-fin*3.6f;
+                    g.Beam(new Vector3(outside,1.1f,z),new Vector3(outside+side*2.6f,7.2f+fin*.4f,z+2.3f),.39f,.65f,17);
+                }
+            } else if(i==2||i==5||i==7||i==8||i==9||i==10||i==11) {
+                for(int j=0;j<6;j++){
+                    float z=stop-20-24*j;
+                    g.Box(hub,1.54f,z,1.24f,.6f,3.1f,i==7?16:9);
+                    if(i==5||i==7){g.Box(hub,2.8f,z,.23f,2.1f,1.42f,accent,Quaternion.Euler(18,0,0));}
+                    else {g.Box(hub,2.12f,z,.19f,1.16f,.21f,10);
+                        for(int crown=0;crown<3;crown++)g.Box(hub,2.72f+crown*.39f,z,1.44f-crown*.35f,.55f,1.83f-crown*.44f,13,Quaternion.Euler(0,28*crown,0));}
+                }
+            } else {
+                for(int j=0;j<3;j++){
+                    float z=stop-26-j*19;
+                    g.Box(outside,2.6f,z,5.3f,5.2f,8,accent);
+                    g.Box(outside-side*2.68f,2.9f,z,.09f,2.3f,7.2f,22);
+                    g.Box(outside,5.35f,z,6.1f,.24f,8.9f,8);
+                }
+            }
+        }
+    }
+}
+
+
+===== Assets/OidoLine4/Line4Drive.cs =====
+using UnityEngine;
+
+namespace LineFour.Oido
+{
+    public enum DoorPhase { Closed, Opening, Boarding, Closing }
+    public sealed class RunState
+    {
+        public static readonly float[] Stops = RouteSchedule.Stops;
+        public static readonly string[] Names = RouteSchedule.Names;
+        public const float Tolerance=4;
+        public int Score, Misses, LastAccuracy;
+        public float LastError;
+        public string Receipt="첫 승하차 대기";
+        public bool Missed;
+        public float Distance, Speed, Dwell, DoorTravel;
+        public int Target, Served = -1;
+        public DoorPhase Phase;
+        public bool Doors => Phase!=DoorPhase.Closed;
+        public bool Complete;
+        public bool InZone => Mathf.Abs(Stops[Target] - Distance) <= Tolerance;
+        public bool Stopped => Speed < 0.01f;
+
+        public void Step(float dt, bool power, bool brake, bool emergency)
+        {
+            if (Complete || Missed) return;
+            if (Phase==DoorPhase.Opening) {
+                DoorTravel=Mathf.Min(1,DoorTravel+dt/1.6f);
+                if(DoorTravel>=1) { Phase=DoorPhase.Boarding; Score+=25;Receipt=Names[Target]+"  문 열기 +25"; }
+                return;
+            }
+            if (Phase==DoorPhase.Boarding) { Dwell+=dt; return; }
+            if (Phase==DoorPhase.Closing) {
+                DoorTravel=Mathf.Max(0,DoorTravel-dt/1.8f);
+                if(DoorTravel==0) {
+                    Phase=DoorPhase.Closed; Served=Target;
+                    LastError=Distance-Stops[Target];
+                    LastAccuracy=Mathf.RoundToInt(100*Mathf.Clamp01(1-Mathf.Abs(LastError)/Tolerance));
+                    Score+=225+LastAccuracy;
+                    Receipt=Names[Target]+"  승하차 +200  ·  정차 +"+LastAccuracy+"  ·  닫기 +25";
+                    Complete=Target==Stops.Length-1;
+                    if(!Complete) Target++;
+                }
+                return;
+            }
+            if (Served<0 || (Stopped && InZone)) {Speed=0;return;}
+            float previous = Speed;
+            float acceleration = emergency ? -2.15f : brake ? -1.23f :
+                power ? Mathf.Lerp(1.02f, 0.48f, Speed / 18) : -0.09f;
+            Speed = Mathf.Clamp(Speed + acceleration * dt, 0, 18);
+            Distance += (previous + Speed) * 0.5f * dt;
+            if (Distance > Stops[Target]+Tolerance) {
+                Score-=100;Misses++;Missed=true;Speed=0;Receipt=Names[Target]+"  무정차 통과 −100";
+            }
+        }
+
+        public void Service()
+        {
+            if (Complete || Missed || !Stopped || !InZone) return;
+            if (Phase==DoorPhase.Closed) { Phase=DoorPhase.Opening; Dwell=0; Speed=0; }
+            else if (Phase==DoorPhase.Boarding && Dwell>=3) Phase=DoorPhase.Closing;
+        }
+
+        public void RestartSection()
+        {
+            if(Doors)return;
+            if (Complete) { Served=-1; Score=Misses=LastAccuracy=0;LastError=0;Receipt="첫 승하차 대기"; }
+            Target=Served+1; Distance=Stops[Mathf.Max(0,Served)]; Speed=0;
+            if(Missed) Distance=Stops[Target]-24;
+            Missed=false;
+            DoorTravel=0; Dwell=0; Phase=DoorPhase.Closed; Complete=false;
+        }
+    }
+
+    public sealed class Line4Drive : MonoBehaviour
+    {
+        public Transform consist;
+        public Camera cabCamera;
+        public SkinnedMeshRenderer[] doorCars;
+        public int[] platformShapes;
+        public float cabEyeZ = -1.7f;
+        public float[] passengerDoors;
+        public Shader passengerFabric;
+        PassengerFlow passengers;
+        public bool Opening { get; private set; }=true;
+        float titleTime;
+        public readonly RunState run = new RunState();
+        public int View { get; private set; }
+        private Vector3 origin;
+        private Font font;
+        private GUIStyle style;
+        private AudioSource rolling, chime;
+        private bool power, brake, emergency;
+        private float yaw,pitch,lastDoorWeight=-1;
+        private static readonly Color Ink = new Color(.035f,.09f,.13f,.95f);
+        private static readonly Color Blue = new Color(.18f,.78f,.96f);
+        private static readonly Color Pale = new Color(.72f,.83f,.87f);
+
+        void Start()
+        {
+            origin = consist.position;
+            font = Font.CreateDynamicFontFromOSFont(new[] {"Malgun Gothic","Apple SD Gothic Neo","Noto Sans CJK KR","Arial"}, 24);
+            rolling = gameObject.AddComponent<AudioSource>(); chime = gameObject.AddComponent<AudioSource>();
+            rolling.clip = MakeSound(false); rolling.loop = true; rolling.volume=0; rolling.Play();
+            chime.clip = MakeSound(true); chime.volume=.3f;
+            passengers=gameObject.AddComponent<PassengerFlow>();
+            passengers.Prepare(passengerDoors,consist,passengerFabric);
+            UpdateCamera();
+        }
+        public void BeginRun() { Opening=false;UpdateCamera(); }
+        public void ReplayOpening()
+        {
+            if(!run.Complete)return;
+            run.RestartSection();consist.position=origin;Opening=true;View=0;yaw=pitch=titleTime=0;
+            ReleaseMouse();passengers.Display(run);
+        }
+
+        AudioClip MakeSound(bool bell)
+        {
+            const int rate = 22050;
+            float[] samples = new float[rate];
+            for (int i=0;i<rate;i++)
+            {
+                float t=(float)i/rate;
+                if (bell) {
+                    float local=t<.35f?t:t-.35f, hz=t<.35f?660:880;
+                    samples[i]=.4f*Mathf.Sin(2*Mathf.PI*hz*local)*Mathf.Exp(-7*local)*Mathf.Clamp01(local*140);
+                } else {
+                    samples[i]=.34f*Mathf.Sin(2*Mathf.PI*68*t)+.12f*Mathf.Sin(2*Mathf.PI*136*t)
+                        +.11f*Mathf.Sin(2*Mathf.PI*343*t)*Mathf.Pow(.5f+.5f*Mathf.Cos(2*Mathf.PI*4*t),12);
+                }
+            }
+            var clip=AudioClip.Create(bell?"Platform chime":"Traction loop", rate,1,rate,false);
+            clip.SetData(samples,0); return clip;
+        }
+
+        void Update()
+        {
+            if(Opening) {
+                titleTime+=Time.deltaTime;
+                Vector3 eye=Vector3.Lerp(new Vector3(-6.8f,3.5f,6),new Vector3(-5.6f,3.25f,4),Mathf.PingPong(titleTime*.07f,1));
+                cabCamera.transform.SetPositionAndRotation(eye,Quaternion.LookRotation(new Vector3(0,2,-4)-eye));
+                float k=Mathf.Min(Screen.width/1200f,Screen.height/680f);
+                Vector2 mouse=new Vector2(Input.mousePosition.x/k,(Screen.height-Input.mousePosition.y)/k);
+                if(Input.GetKeyDown(KeyCode.Return)||Input.GetKeyDown(KeyCode.KeypadEnter)||
+                    (Input.GetMouseButtonDown(0)&&StartButton(Screen.height/k).Contains(mouse)))BeginRun();
+                passengers.Display(run); return;
+            }
+            if (Input.GetKeyDown(KeyCode.C)) CycleView();
+            if (Input.GetKeyDown(KeyCode.F)) yaw=pitch=0;
+            if (View!=0 && Input.GetMouseButtonDown(1)) { Cursor.lockState=CursorLockMode.Locked; Cursor.visible=false; }
+            if (!Input.GetMouseButton(1) || Input.GetKeyDown(KeyCode.Escape)) ReleaseMouse();
+            else if (Cursor.lockState==CursorLockMode.Locked) {
+                TurnView(Input.GetAxisRaw("Mouse X")*2.8f,-Input.GetAxisRaw("Mouse Y")*2.8f);
+            }
+            if (Input.GetKeyDown(KeyCode.R)) {
+                if(run.Complete){ReplayOpening();return;}
+                run.RestartSection();
+            }
+            if (Input.GetKeyDown(KeyCode.E)) {
+                var was=run.Phase; run.Service(); if(was!=run.Phase) chime.Play();
+            }
+            power=Input.GetKey(KeyCode.W)||Input.GetKey(KeyCode.UpArrow);
+            brake=Input.GetKey(KeyCode.S)||Input.GetKey(KeyCode.DownArrow);
+            emergency=Input.GetKey(KeyCode.Space);
+            run.Step(Time.deltaTime,power,brake,emergency);
+            float weight=100*Mathf.SmoothStep(0,1,run.DoorTravel);
+            if(weight!=lastDoorWeight) {
+                for(int i=0;i<doorCars.Length;i++) doorCars[i].SetBlendShapeWeight(platformShapes[i],weight);
+                lastDoorWeight=weight;
+            }
+            consist.position=origin+Vector3.forward*run.Distance;
+            passengers.Display(run);
+            rolling.volume=.17f*run.Speed/18; rolling.pitch=.48f+run.Speed*.08f;
+            UpdateCamera();
+        }
+
+        void UpdateCamera()
+        {
+            Vector3 nose=Vector3.forward*run.Distance;
+            Vector3 eye, aim;
+            if (View==1) { eye=new Vector3(.57f,3.03f,cabEyeZ); aim=eye+new Vector3(0,-.055f,1)*25; }
+            else if (View==2) { eye=new Vector3(0,2.52f,-5.4f); aim=eye+new Vector3(0,-.02f,-1)*12; }
+            else { eye=new Vector3(12,30,14); aim=new Vector3(0,1.9f,-18); }
+            cabCamera.transform.SetPositionAndRotation(nose+eye,Quaternion.LookRotation(aim-eye)*Quaternion.Euler(pitch,yaw,0));
+        }
+        public void TurnView(float horizontal,float vertical)
+        {
+            if(View==0) return;
+            yaw=Mathf.Repeat(yaw+horizontal+180,360)-180;
+            pitch=Mathf.Clamp(pitch+vertical,-75,75);
+            UpdateCamera();
+        }
+        public void CycleView()
+        {
+            View=(View+1)%3; yaw=pitch=0; ReleaseMouse(); UpdateCamera();
+        }
+        void ReleaseMouse() { if(Cursor.lockState!=CursorLockMode.None) Cursor.lockState=CursorLockMode.None; Cursor.visible=true; }
+        void OnApplicationFocus(bool focus) { if(!focus) ReleaseMouse(); }
+        void OnDisable() { ReleaseMouse(); }
+
+        void RectColor(float x,float y,float w,float h,Color c)
+        {
+            GUI.color=c; GUI.DrawTexture(new Rect(x,y,w,h),Texture2D.whiteTexture); GUI.color=Color.white;
+        }
+        void Label(float x,float y,float w,float h,string msg,int size,Color color,bool bold=false)
+        {
+            style.fontSize=size; style.fontStyle=bold?FontStyle.Bold:FontStyle.Normal; style.normal.textColor=color;
+            GUI.Label(new Rect(x,y,w,h),msg,style);
+        }
+        static Rect StartButton(float h) => new Rect(56,h*.5f+146,365,48);
+        void Title(float h)
+        {
+            float y=h*.5f-230;
+            RectColor(26,y,444,451,Ink);RectColor(26,y,444,5,Blue);
+            Label(56,y+26,375,28,"SEOUL METRO     /     LINE 04",16,Blue,true);
+            Label(53,y+63,395,83,"4호선 운전실",48,Color.white,true);
+            Label(56,y+151,370,34,"오이도  →  진접      51개 역 각역정차",20,Pale,true);
+            RectColor(56,y+202,363,1,new Color(.27f,.39f,.44f));
+            Label(56,y+213,375,29,"정차 표지 ±4 m 안에서 멈추세요.",17,Color.white,true);
+            Label(56,y+248,380,26,"승하차 +200   ·   정차 오차 보너스 0~100",16,Pale);
+            Label(56,y+278,380,26,"문 열기 +25   ·   닫기 +25   ·   통과 −100",16,Pale);
+            Label(56,y+324,385,27,"W 가속    S 제동    E 출입문    C 시점",15,Color.white);
+            Rect b=StartButton(h);RectColor(b.x,b.y,b.width,b.height,Blue);
+            Label(b.x+18,b.y,340,48,"운행 시작                         ENTER  ↵",20,Ink,true);
+        }
+        void OnGUI()
+        {
+            if (Event.current.type!=EventType.Repaint) return;
+            if(style==null) style=new GUIStyle(GUI.skin.label){font=font,alignment=TextAnchor.MiddleLeft,padding=new RectOffset()};
+            float s=Mathf.Min(Screen.width/1200f,Screen.height/680f), w=Screen.width/s, h=Screen.height/s;
+            Matrix4x4 saved=GUI.matrix; GUI.matrix=Matrix4x4.Scale(new Vector3(s,s,1));
+            if(Opening){Title(h);GUI.matrix=saved;return;}
+            float remaining=RunState.Stops[run.Target]-run.Distance;
+            RectColor(24,22,262,64,Ink); RectColor(24,22,5,64,Blue);
+            Label(43,24,220,22,"SEOUL METRO   /   LINE 04",13,Blue,true);
+            Label(43,44,235,34,"오이도 → 진접",22,Color.white,true);
+            RectColor(24,94,382,64,Ink);
+            Label(42,96,350,27,"운행 점수   "+run.Score.ToString("N0")+" 점",18,Blue,true);
+            Label(42,124,355,28,run.Receipt,14,Pale);
+            RectColor(w-360,22,336,64,Ink);
+            Label(w-343,25,250,22,run.Complete?"운행 종료":(run.Served<0?"출발역":"정차역")+"   "+(run.Target+1)+" / "+RunState.Stops.Length,13,Blue,true);
+            Label(w-343,44,225,31,RunState.Names[run.Target],21,Color.white,true);
+            Label(w-127,43,100,30,(Mathf.Abs(remaining)<12?remaining.ToString("0.00"):Mathf.RoundToInt(remaining).ToString())+" m",19,Pale);
+            if(Mathf.Abs(remaining)<100){
+                RectColor(w-360,91,336,53,Ink);
+                Label(w-344,92,310,23,"정차 허용 ±4 m     목표 0.00 m",14,Pale,true);
+                float x=w-192;RectColor(x-104,124,208,3,Pale);RectColor(x-35,121,70,8,Blue);
+                RectColor(x-1,117,2,16,Color.white);
+                RectColor(x-Mathf.Clamp(remaining,-12,12)*8.7f-2,116,4,19,Color.yellow);
+            }
+            string action = run.Complete?"운행 완료   ·   R  다시 운전":
+                run.Phase==DoorPhase.Opening?"승강장 쪽 문 열리는 중":
+                run.Phase==DoorPhase.Closing?"문 닫히는 중":run.Doors?
+                (run.Dwell<3?"승하차 중   "+Mathf.CeilToInt(3-run.Dwell)+"초":"E  문 닫고 승하차 완료"):
+                run.Missed?"통과 −100   ·   R  재접근":
+                run.InZone && run.Stopped?"정위치 정차   ·   E  문 열기":
+                remaining <= run.Speed*run.Speed/2.46f+12?"정차 지점 접근   ·   S  제동":
+                run.Distance<2?"W  길게 눌러 출발":"정차 표지 ±4 m 이내에 정차";
+            RectColor(24,h-112,433,88,Ink); RectColor(24,h-112,433,3,Blue);
+            Label(43,h-101,83,55,Mathf.RoundToInt(run.Speed*3.6f).ToString("00"),38,Color.white,true);
+            Label(104,h-92,73,34,"km/h",15,Pale);
+            Label(178,h-103,260,34,action,15,Color.white,true);
+            Label(178,h-70,250,26,emergency?"비상 제동":run.Doors?"출입문 열림":brake?"제동":power?"가속":"타행 / 대기",14,Blue);
+            RectColor(43,h-44,113,4,new Color(.23f,.32f,.37f)); RectColor(43,h-44,113*run.Speed/18,4,Blue);
+            RectColor(w-442,h-97,418,73,Ink);
+            Label(w-425,h-94,397,31,"W 가속     S 제동     Space 비상 제동     E 승하차",15,Color.white,true);
+            Label(w-425,h-61,410,26,View==0?"외부 상공 고정    C 운전석으로    R 재시작":"C 시점    우클릭 드래그 둘러보기    F 정면    R 재시작",14,Pale);
+            if(run.Complete){
+                float x=w*.5f-207,y=h*.5f-86;
+                RectColor(x,y,414,172,Ink);
+                Label(x+22,y+12,370,28,"진접 종착   /   51개 역 승하차 완료",19,Blue,true);
+                Label(x+22,y+49,365,61,run.Score.ToString("N0")+" 점",38,Color.white,true);
+                Label(x+22,y+119,375,30,"통과 "+run.Misses+"회     R  새 운행",17,Pale);
+            }
+            GUI.matrix=saved;
+        }
+    }
+}
+
+
+===== Assets/OidoLine4/PassengerFabric.shader =====
+Shader "Line4/Passenger Fabric" {
+ SubShader {
+  Tags { "RenderType"="Opaque" }
+  Pass {
+   CGPROGRAM
+   #pragma vertex vert
+   #pragma fragment frag
+   #pragma multi_compile_fog
+   #include "UnityCG.cginc"
+   struct Input { float4 vertex:POSITION; float3 normal:NORMAL; fixed4 color:COLOR; };
+   struct Varying { float4 pos:SV_POSITION; fixed4 color:COLOR; UNITY_FOG_COORDS(1) };
+   Varying vert(Input v) {
+    Varying o; o.pos=UnityObjectToClipPos(v.vertex);
+    o.color=v.color*(.62+.38*saturate(dot(UnityObjectToWorldNormal(v.normal),normalize(float3(-.3,.8,.25)))));
+    UNITY_TRANSFER_FOG(o,o.pos); return o;
+   }
+   fixed4 frag(Varying i):SV_Target { fixed4 c=i.color; UNITY_APPLY_FOG(i.fogCoord,c); return c; }
+   ENDCG
+  }
+ }
+}
+
+
+===== Assets/OidoLine4/PassengerFlow.cs =====
+using System.Collections.Generic;
+using UnityEngine;
+
+namespace LineFour.Oido
+{
+    // Three cohorts retain the people who just alighted until the train leaves the platform.
+    public sealed class PassengerFlow : MonoBehaviour
+    {
+        const int Count=14;
+        sealed class Person { public Transform root,left,right; }
+        Person[,] people=new Person[3,Count];
+        float[] doors;
+        Transform train;
+        Material cloth;
+        List<Mesh> meshes=new List<Mesh>();
+        public int VisibleCount {get; private set;}
+        public int WalkingCount {get; private set;}
+        public void Prepare(float[] centers,Transform consist,Shader fabric)
+        {
+            doors=centers;train=consist;
+            if(doors==null||doors.Length<4)return;
+            cloth=new Material(fabric);
+            string[] colors={"356175","AB644D","55634A","C18B47","826583","374C78","9B505C"};
+            Mesh leg=Part("Trousers",new[]{new Shape(0,-.33f,0,.145f,.69f,.185f,"343C49"),new Shape(0,-.665f,.046f,.156f,.12f,.25f,"242932")});
+            for(int c=0;c<3;c++)for(int j=0;j<Count;j++){
+                int k=(j+c*3)%colors.Length;
+                if(meshes.Count<=1+k){
+                    string skin=new[]{"C88968","E2B699","AE795F"}[k%3],coat=colors[k];
+                    Part("Commuter "+k,new[]{
+                        new Shape(0,1.02f,0,.43f,.66f,.31f,coat),new Shape(0,1.42f,0,.25f,.25f,.23f,skin),
+                        new Shape(0,1.56f,.013f,.235f,.315f,.245f,skin),new Shape(0,1.66f,-.02f,.252f,.18f,.253f,k%2==0?"322F30":"503C34"),
+                        new Shape(-.227f,1.04f,0,.112f,.53f,.14f,coat),new Shape(.227f,1.04f,0,.112f,.53f,.14f,coat),
+                        new Shape(-.23f,.776f,.016f,.094f,.13f,.10f,skin),new Shape(.23f,.776f,.016f,.094f,.13f,.10f,skin),
+                        new Shape(0,1.03f,-.164f,.26f,.38f,.14f,k%2==0?"444348":"826548")});
+                }
+                var p=new Person();p.root=new GameObject("Passenger "+c+"-"+j).transform;p.root.SetParent(transform,false);
+                Piece(p.root,meshes[1+k],Vector3.zero);
+                p.left=Piece(p.root,leg,new Vector3(-.094f,.735f,0));p.right=Piece(p.root,leg,new Vector3(.094f,.735f,0));
+                p.root.localScale=Vector3.one*(.91f+.03f*((c+j)%6));people[c,j]=p;
+            }
+        }
+        struct Shape {
+            public Vector3 center,size;public Color color;
+            public Shape(float x,float y,float z,float w,float h,float d,string rgb) {
+                center=new Vector3(x,y,z);size=new Vector3(w,h,d);ColorUtility.TryParseHtmlString("#"+rgb,out color);
+            }
+        }
+        Mesh Part(string label,Shape[] shapes)
+        {
+            var verts=new List<Vector3>();var colors=new List<Color>();var tris=new List<int>();
+            foreach(var s in shapes){
+                int first=verts.Count;
+                float[] radius={.56f,.94f,1,.62f};float[] ys={-.5f,-.36f,.29f,.5f};
+                for(int row=0;row<4;row++)for(int a=0;a<8;a++){
+                    float angle=2*Mathf.PI*a/8;verts.Add(s.center+Vector3.Scale(s.size,new Vector3(.5f*radius[row]*Mathf.Cos(angle),ys[row],.5f*radius[row]*Mathf.Sin(angle))));colors.Add(s.color);
+                }
+                for(int row=0;row<3;row++)for(int a=0;a<8;a++){
+                    int n=first+row*8+a,m=first+row*8+(a+1)%8;
+                    tris.AddRange(new[]{n,n+8,m,m,n+8,m+8});
+                }
+                for(int a=1;a<7;a++)tris.AddRange(new[]{first,first+a,first+a+1,first+24,first+25+a,first+24+a});
+            }
+            var mesh=new Mesh{name=label};mesh.SetVertices(verts);mesh.SetColors(colors);mesh.SetTriangles(tris,0);
+            mesh.RecalculateNormals();mesh.RecalculateBounds();meshes.Add(mesh);return mesh;
+        }
+        Transform Piece(Transform parent,Mesh mesh,Vector3 pos){
+            var g=new GameObject(mesh.name,typeof(MeshFilter),typeof(MeshRenderer));g.transform.SetParent(parent,false);g.transform.localPosition=pos;
+            g.GetComponent<MeshFilter>().sharedMesh=mesh;g.GetComponent<MeshRenderer>().sharedMaterial=cloth;return g.transform;
+        }
+        public void Display(RunState r)
+        {
+            VisibleCount=WalkingCount=0;if(doors==null||doors.Length<4)return;
+            for(int c=0;c<3;c++)for(int j=0;j<Count;j++){
+                Person p=people[c,j];int role=(c-r.Target%3+3)%3;
+                bool incoming=role==0, last=role==1;
+                float dz=doors[Mathf.RoundToInt(j*(doors.Length-1f)/(Count-1))];
+                float stop=RunState.Stops[r.Target], previous=RunState.Stops[Mathf.Max(0,r.Target-1)];
+                bool show=incoming?r.Target<RunState.Stops.Length-1 && Mathf.Abs(stop-r.Distance)<250:
+                    last?r.Target>=2 && r.Distance-previous<235:r.Served>=0;
+                if(p.root.gameObject.activeSelf!=show)p.root.gameObject.SetActive(show);
+                if(!show)continue;
+                VisibleCount++;
+                float q=r.Phase==DoorPhase.Boarding?Mathf.Clamp01((r.Dwell-(incoming?1.27f:0)-.055f*(j%4))/(incoming?1.43f:1.06f)):
+                    (r.Phase==DoorPhase.Closing||r.Complete?1:0);
+                Vector3 inside=new Vector3(-.64f,1.40f,train.position.z+dz+.6f);
+                Vector3 doorway=new Vector3(-1.51f,1.30f,train.position.z+dz);
+                Vector3 wait=new Vector3(-3.08f-.17f*(j%3),1.265f,stop+dz+.48f);
+                Vector3 outside=new Vector3(-3.85f,1.265f,stop+dz-1.15f);
+                Vector3 start=incoming?wait:inside,end=incoming?inside:outside;
+                bool moving=q>0&&q<1&&!last;float swing=moving?Mathf.Sin(q*Mathf.PI*6)*23:0;
+                if(moving)WalkingCount++;
+                Vector3 pos=last?new Vector3(-3.85f,1.265f,previous+dz-1.15f):
+                    q<.5f?Vector3.Lerp(start,doorway,q*2):Vector3.Lerp(doorway,end,(q-.5f)*2);
+                pos.y+=Mathf.Abs(swing)*.0008f;
+                p.root.SetPositionAndRotation(pos,Quaternion.Euler(0,last?-65:incoming?88:-92,0));
+                p.left.localRotation=Quaternion.Euler(swing,0,0);p.right.localRotation=Quaternion.Euler(-swing,0,0);
+            }
+        }
+        void OnDestroy(){foreach(var mesh in meshes)Destroy(mesh);if(cloth)Destroy(cloth);}
+    }
+}
+
+
+===== Assets/OidoLine4/RouteSchedule.cs =====
+namespace LineFour.Oido { public static class RouteSchedule {
+public static readonly int[] Ids = { 456, 455, 454, 453, 452, 451, 450, 449, 448, 447, 446, 445, 444, 443, 442, 441, 440, 439, 438, 437, 436, 435, 434, 433, 432, 431, 430, 429, 428, 427, 426, 425, 424, 423, 422, 421, 420, 419, 418, 417, 416, 415, 414, 413, 412, 411, 410, 409, 408, 406, 405 };
+public static readonly string[] Names = { "오이도", "정왕", "신길온천", "안산", "초지", "고잔", "중앙", "한대앞", "상록수", "반월", "대야미", "수리산", "산본", "금정", "범계", "평촌", "인덕원", "정부과천청사", "과천", "대공원", "경마공원", "선바위", "남태령", "사당", "총신대입구", "동작", "이촌", "신용산", "삼각지", "숙대입구", "서울역", "회현", "명동", "충무로", "동대문역사문화공원", "동대문", "혜화", "한성대입구", "성신여대입구", "길음", "미아사거리", "미아", "수유", "쌍문", "창동", "노원", "상계", "불암산", "별내별가람", "오남", "진접" };
+public static readonly string[] English = { "Oido", "Jeongwang", "Singiloncheon", "Ansan", "Choji", "Gojan", "Jungang", "Hanyang Univ. at Ansan", "Sangnoksu", "Banwol", "Daeyami", "Surisan", "Sanbon", "Geumjeong", "Beomgye", "Pyeongchon", "Indeogwon", "Government Complex Gwacheon", "Gwacheon", "Seoul Grand Park", "Seoul Racecourse Park", "Seonbawi", "Namtaeryeong", "Sadang", "Chongshin Univ.", "Dongjak", "Ichon", "Sinyongsan", "Samgakji", "Sookmyung Women's Univ.", "Seoul Station", "Hoehyeon", "Myeongdong", "Chungmuro", "Dongdaemun History & Culture Park", "Dongdaemun", "Hyehwa", "Hansung Univ.", "Sungshin Women's Univ.", "Gireum", "Miasageori", "Mia", "Suyu", "Ssangmun", "Changdong", "Nowon", "Sanggye", "Buramsan", "Byeollae Byeolgaram", "Onam", "Jinjeop" };
+public static readonly float[] Stops = { 0, 620, 1340, 1960, 2530, 3080, 3680, 4280, 4930, 5700, 6370, 7150, 7750, 8460, 9250, 9830, 10490, 11210, 11820, 12610, 13190, 13850, 14570, 15180, 15970, 16550, 17210, 17930, 18540, 19330, 19910, 20570, 21290, 21900, 22690, 23270, 23930, 24650, 25260, 26050, 26630, 27290, 28010, 28620, 29410, 29990, 30650, 31370, 31980, 32770, 33350 };
+public static bool Tunnel(int i) => (i >= 14 && i <= 24) || (i >= 26 && i <= 43) || i >= 48;
+} }
