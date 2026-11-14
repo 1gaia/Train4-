@@ -8,6 +8,8 @@ namespace LineFour.Oido
         public static readonly float[] Stops = RouteSchedule.Stops;
         public static readonly string[] Names = RouteSchedule.Names;
         public const float Tolerance=4;
+        internal bool[] ScreenDoorStops;
+        float stopError;
         public int Score, Misses, LastAccuracy;
         public float LastError;
         public string Receipt="첫 승하차 대기";
@@ -33,7 +35,7 @@ namespace LineFour.Oido
                 DoorTravel=Mathf.Max(0,DoorTravel-dt/1.8f);
                 if(DoorTravel==0) {
                     Phase=DoorPhase.Closed; Served=Target;
-                    LastError=Distance-Stops[Target];
+                    LastError=stopError;
                     LastAccuracy=Mathf.RoundToInt(100*Mathf.Clamp01(1-Mathf.Abs(LastError)/Tolerance));
                     Score+=225+LastAccuracy;
                     Receipt=Names[Target]+"  승하차 +200  ·  정차 +"+LastAccuracy+"  ·  닫기 +25";
@@ -56,7 +58,12 @@ namespace LineFour.Oido
         public void Service()
         {
             if (Complete || Missed || !Stopped || !InZone) return;
-            if (Phase==DoorPhase.Closed) { Phase=DoorPhase.Opening; Dwell=0; Speed=0; }
+            if (Phase==DoorPhase.Closed) {
+                stopError = Distance - Stops[Target];
+                if (ScreenDoorStops != null && Target < ScreenDoorStops.Length && ScreenDoorStops[Target])
+                    Distance = Stops[Target];
+                Phase=DoorPhase.Opening; Dwell=0; Speed=0;
+            }
             else if (Phase==DoorPhase.Boarding && Dwell>=3) Phase=DoorPhase.Closing;
         }
 
@@ -82,7 +89,8 @@ namespace LineFour.Oido
         public float cabEyeZ = -1.88f;
         public float[] passengerDoors;
         public Shader passengerFabric;
-        [SerializeField] PlatformScreenDoors oidoScreenDoors;
+        [SerializeField] PlatformScreenDoors[] screenDoors = System.Array.Empty<PlatformScreenDoors>();
+        PlatformScreenDoors movingScreenDoors;
         PassengerFlow passengers;
         public bool Opening { get; private set; }=true;
         float titleTime;
@@ -103,6 +111,9 @@ namespace LineFour.Oido
         {
             origin = consist.position;
             carLods=consist.GetComponentsInChildren<LODGroup>();
+            run.ScreenDoorStops = new bool[screenDoors.Length];
+            for (int i = 0; i < screenDoors.Length; i++)
+                run.ScreenDoorStops[i] = screenDoors[i] != null;
             font = Font.CreateDynamicFontFromOSFont(new[] {"Malgun Gothic","Apple SD Gothic Neo","Noto Sans CJK KR","Arial"}, 24);
             rolling = gameObject.AddComponent<AudioSource>(); chime = gameObject.AddComponent<AudioSource>();
             rolling.clip = MakeSound(false); rolling.loop = true; rolling.volume=0; rolling.Play();
@@ -180,7 +191,11 @@ namespace LineFour.Oido
             float weight=100*Mathf.SmoothStep(0,1,run.DoorTravel);
             if(weight!=lastDoorWeight) {
                 for(int i=0;i<doorCars.Length;i++) doorCars[i].SetBlendShapeWeight(platformShapes[i],weight);
-                if (oidoScreenDoors) oidoScreenDoors.SetOpening(run.Target == 0 ? weight / 100f : 0);
+                // Closing the last few millimeters can advance the target to the next station.
+                if (weight > 0)
+                    movingScreenDoors = run.Target < screenDoors.Length ? screenDoors[run.Target] : null;
+                if (movingScreenDoors) movingScreenDoors.SetOpening(weight / 100f);
+                if (weight == 0) movingScreenDoors = null;
                 lastDoorWeight=weight;
             }
             consist.position=origin+Vector3.forward*run.Distance;
