@@ -120,6 +120,9 @@ namespace LineFour.Oido
             chime.clip = MakeSound(true); chime.volume=.3f;
             passengers=gameObject.AddComponent<PassengerFlow>();
             passengers.Prepare(passengerDoors,consist,passengerFabric);
+            gameObject.AddComponent<CurveRoute>();
+            gameObject.AddComponent<RouteAtmosphere>();
+            gameObject.AddComponent<RouteAudio>();
             UpdateCamera();
         }
         public void BeginRun()
@@ -200,7 +203,7 @@ namespace LineFour.Oido
             }
             consist.position=origin+Vector3.forward*run.Distance;
             passengers.Display(run);
-            rolling.volume=.17f*run.Speed/18; rolling.pitch=.48f+run.Speed*.08f;
+            rolling.volume=0;
             UpdateCamera();
         }
 
@@ -229,10 +232,10 @@ namespace LineFour.Oido
             else {
                 aim=new Vector3(0,1.9f,-18);
                 eye=aim+Quaternion.Euler(-Mathf.Clamp(39+pitch,10,79),20+yaw,0)*Vector3.forward*orbitDistance;
-                cabCamera.transform.SetPositionAndRotation(nose+eye,Quaternion.LookRotation(aim-eye));
+                cabCamera.transform.SetPositionAndRotation(CurveRoute.Map(nose+eye),Quaternion.LookRotation(CurveRoute.Map(nose+aim)-CurveRoute.Map(nose+eye)));
                 return;
             }
-            cabCamera.transform.SetPositionAndRotation(nose+eye,Quaternion.LookRotation(aim-eye)*Quaternion.Euler(pitch,yaw,0));
+            cabCamera.transform.SetPositionAndRotation(CurveRoute.Map(nose+eye),Quaternion.LookRotation(CurveRoute.Map(nose+aim)-CurveRoute.Map(nose+eye))*Quaternion.Euler(pitch,yaw,0));
         }
         public void TurnView(float horizontal,float vertical)
         {

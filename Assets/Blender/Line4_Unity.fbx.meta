@@ -1,7 +1,7 @@
 fileFormatVersion: 2
 guid: 402d35406b9f8984bb961c9663bc088d
 ModelImporter:
-  serializedVersion: 24501
+  serializedVersion: 24600
   internalIDToNameTable: []
   externalObjects: {}
   materials:
@@ -31,7 +31,7 @@ ModelImporter:
     extraExposedTransformPaths: []
     extraUserProperties: []
     clipAnimations: []
-    isReadable: 0
+    isReadable: 1
   meshes:
     lODScreenPercentages:
     - 0.25
@@ -42,6 +42,8 @@ ModelImporter:
     addColliders: 0
     useSRGBMaterialColor: 1
     sortHierarchyByName: 1
+    preBakeConvexCollisionMesh: 0
+    preBakeTriangleCollisionMesh: 0
     importPhysicalCameras: 1
     importVisibility: 1
     importBlendShapes: 1
