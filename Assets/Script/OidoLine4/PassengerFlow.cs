@@ -7,65 +7,58 @@ namespace LineFour.Oido
     public sealed class PassengerFlow : MonoBehaviour
     {
         const int Capacity = 22;
-        sealed class Person { public Transform root,left,right; }
-        Person[,] people=new Person[3,Capacity];
+        sealed class Person { public Transform root; public SkinnedMeshRenderer skin; }
+        readonly Person[,] people=new Person[3,Capacity];
+        readonly List<Material> clothes=new List<Material>();
+        static readonly string[] Models={"casual_jacket_standing","woman_tee_standing","casual_shirt_standing","mechanic_overalls_standing","woman_tee_sitting","veteran_cap_sitting"};
+        readonly GameObject[] models=new GameObject[Models.Length];
         float[] doors;
         Transform train;
-        Material cloth;
-        List<Mesh> meshes=new List<Mesh>();
         public int VisibleCount {get; private set;}
         public int WalkingCount {get; private set;}
         public void Prepare(float[] centers,Transform consist,Shader fabric)
         {
             doors=centers;train=consist;
-            if(doors==null||doors.Length<4)return;
-            cloth=new Material(fabric);
-            string[] colors={"356175","AB644D","55634A","C18B47","826583","374C78","9B505C"};
-            Mesh leg=Part("Trousers",new[]{new Shape(0,-.33f,0,.145f,.69f,.185f,"343C49"),new Shape(0,-.665f,.046f,.156f,.12f,.25f,"242932")});
+            for(int i=0;i<Models.Length;i++)models[i]=Resources.Load<GameObject>("Commuters/"+Models[i]);
+            var texture=Resources.Load<Texture2D>("Commuters/People");
+            foreach(var tint in new[]{"FFFFFF","E4EAF9","EDDAD0","D6E2D9","E5D9E6"}){
+                ColorUtility.TryParseHtmlString("#"+tint,out var color);
+                var m=new Material(Shader.Find("Standard")){mainTexture=texture,color=color,enableInstancing=true};
+                m.SetFloat("_Glossiness",.13f);m.EnableKeyword("_ALPHATEST_ON");m.SetFloat("_Cutoff",.43f);m.renderQueue=2450;
+                clothes.Add(m);
+            }
             for(int c=0;c<3;c++)for(int j=0;j<Capacity;j++){
-                int k=(j+c*3)%colors.Length;
-                if(meshes.Count<=1+k){
-                    string skin=new[]{"C88968","E2B699","AE795F"}[k%3],coat=colors[k];
-                    Part("Commuter "+k,new[]{
-                        new Shape(0,1.02f,0,.43f,.66f,.31f,coat),new Shape(0,1.42f,0,.25f,.25f,.23f,skin),
-                        new Shape(0,1.56f,.013f,.235f,.315f,.245f,skin),new Shape(0,1.66f,-.02f,.252f,.18f,.253f,k%2==0?"322F30":"503C34"),
-                        new Shape(-.227f,1.04f,0,.112f,.53f,.14f,coat),new Shape(.227f,1.04f,0,.112f,.53f,.14f,coat),
-                        new Shape(-.23f,.776f,.016f,.094f,.13f,.10f,skin),new Shape(.23f,.776f,.016f,.094f,.13f,.10f,skin),
-                        new Shape(0,1.03f,-.164f,.26f,.38f,.14f,k%2==0?"444348":"826548")});
+                var root=PersonModel((j*3+c)%4,transform,c*Capacity+j);
+                people[c,j]=new Person{root=root,skin=root.GetComponentInChildren<SkinnedMeshRenderer>()};
+            }
+            for(int car=0;car<10;car++){
+                var cabin=new GameObject("Saloon occupants "+(car+1)).transform;cabin.SetParent(train,false);
+                float center=0;
+                for(int d=0;d<4;d++)center+=doors[car*4+d]*.25f;
+                cabin.localPosition=Vector3.forward*center;
+                for(int j=0;j<15;j++){
+                    bool sitting=j<12;
+                    int side=j%2==0?-1:1;
+                    int bay=j/4;
+                    float z=sitting?(bay-1)*4.4f+((j/2)%2==0?-.60f:.61f): (j-13)*4.4f+1.19f;
+                    int seed=car*17+j;
+                    var rider=PersonModel(sitting?4+(seed/3+car)%2:seed%4,cabin,seed);
+                    rider.localPosition=new Vector3(side*(sitting?1.03f:.72f),1.24f,z);
+                    rider.localRotation=Quaternion.Euler(0,side*90+(sitting?0:(seed%5-2)*12),0);
                 }
-                var p=new Person();p.root=new GameObject("Passenger "+c+"-"+j).transform;p.root.SetParent(transform,false);
-                Piece(p.root,meshes[1+k],Vector3.zero);
-                p.left=Piece(p.root,leg,new Vector3(-.094f,.735f,0));p.right=Piece(p.root,leg,new Vector3(.094f,.735f,0));
-                p.root.localScale=Vector3.one*(.91f+.03f*((c+j)%6));people[c,j]=p;
             }
         }
-        struct Shape {
-            public Vector3 center,size;public Color color;
-            public Shape(float x,float y,float z,float w,float h,float d,string rgb) {
-                center=new Vector3(x,y,z);size=new Vector3(w,h,d);ColorUtility.TryParseHtmlString("#"+rgb,out color);
-            }
-        }
-        Mesh Part(string label,Shape[] shapes)
+        Transform PersonModel(int model,Transform parent,int seed)
         {
-            var verts=new List<Vector3>();var colors=new List<Color>();var tris=new List<int>();
-            foreach(var s in shapes){
-                int first=verts.Count;
-                float[] radius={.56f,.94f,1,.62f};float[] ys={-.5f,-.36f,.29f,.5f};
-                for(int row=0;row<4;row++)for(int a=0;a<8;a++){
-                    float angle=2*Mathf.PI*a/8;verts.Add(s.center+Vector3.Scale(s.size,new Vector3(.5f*radius[row]*Mathf.Cos(angle),ys[row],.5f*radius[row]*Mathf.Sin(angle))));colors.Add(s.color);
-                }
-                for(int row=0;row<3;row++)for(int a=0;a<8;a++){
-                    int n=first+row*8+a,m=first+row*8+(a+1)%8;
-                    tris.AddRange(new[]{n,n+8,m,m,n+8,m+8});
-                }
-                for(int a=1;a<7;a++)tris.AddRange(new[]{first,first+a,first+a+1,first+24,first+25+a,first+24+a});
+            var holder=new GameObject("Commuter "+seed).transform;
+            holder.SetParent(parent,false);
+            var body=Instantiate(models[model],holder,false);
+            holder.localScale=Vector3.one*(.94f+.022f*(seed%6));
+            foreach(var renderer in body.GetComponentsInChildren<Renderer>()){
+                renderer.sharedMaterial=clothes[seed%clothes.Count];
+                renderer.shadowCastingMode=UnityEngine.Rendering.ShadowCastingMode.Off;
             }
-            var mesh=new Mesh{name=label};mesh.SetVertices(verts);mesh.SetColors(colors);mesh.SetTriangles(tris,0);
-            mesh.RecalculateNormals();mesh.RecalculateBounds();meshes.Add(mesh);return mesh;
-        }
-        Transform Piece(Transform parent,Mesh mesh,Vector3 pos){
-            var g=new GameObject(mesh.name,typeof(MeshFilter),typeof(MeshRenderer));g.transform.SetParent(parent,false);g.transform.localPosition=pos;
-            g.GetComponent<MeshFilter>().sharedMesh=mesh;g.GetComponent<MeshRenderer>().sharedMaterial=cloth;return g.transform;
+            return holder;
         }
 
         static int CrowdAt(int station) => 16 + (station * 5 + 2) % 7;
@@ -136,11 +129,13 @@ namespace LineFour.Oido
 
                     position.y += Mathf.Abs(swing) * .0008f;
                     person.root.SetPositionAndRotation(position, Quaternion.Euler(0, heading, 0));
-                    person.left.localRotation = Quaternion.Euler(swing, 0, 0);
-                    person.right.localRotation = Quaternion.Euler(-swing, 0, 0);
+                    if(person.skin && person.skin.sharedMesh.blendShapeCount>=2){
+                        person.skin.SetBlendShapeWeight(0,Mathf.Max(0,swing)*4);
+                        person.skin.SetBlendShapeWeight(1,Mathf.Max(0,-swing)*4);
+                    }
                 }
             }
         }
-        void OnDestroy(){foreach(var mesh in meshes)Destroy(mesh);if(cloth)Destroy(cloth);}
+        void OnDestroy(){foreach(var m in clothes)Destroy(m);}
     }
 }

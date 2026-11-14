@@ -73,7 +73,7 @@ namespace LineFour.Streets
             for(int i=-1;i<=1;i+=2)Solid(x+2.08f,y+.52f,z+i*.59f-.14f,x+2.10f,y+.69f,z+i*.59f+.14f,12,12);
         }
 
-        public void Furnish(float length, Random rng,bool rear)
+        public void Furnish(float length, Random rng,bool rear,bool core)
         {
             Origin(0,0);
             for(float x=-length/2+5;x<length/2-2;x+=17+rng.Next(6)){
@@ -83,6 +83,7 @@ namespace LineFour.Streets
             if(!rear && length>33){
                 // Small rear courtyards break up the area between the two streets.
                 Solid(-length*.46f,-.17f,14,length*.46f,-.12f,36,4,48);
+                if(!core){
                 for(float stall=-length*.42f;stall<length*.42f;stall+=5.7f){
                     Solid(stall,-.115f,18,stall+.09f,-.098f,21.2f,6,6);
                     if(rng.Next(3)==0)Car(stall+2.6f,19.6f,rng);
@@ -90,6 +91,7 @@ namespace LineFour.Streets
                 for(float garden=-length*.38f;garden<length*.42f;garden+=19){
                     Solid(garden-2.2f,-.13f,28,garden+2.2f,.035f,31,6,486);
                     Tree(rng,garden,29.5f);
+                }
                 }
                 Car(-length*.24f,-5.94f,rng);
                 if(rng.Next(3)!=0)Car(length*.22f,-5.94f,rng);
@@ -101,6 +103,40 @@ namespace LineFour.Streets
                 for(float x=-length/2;x<length/2;x+=3)
                     Solid(x,-.122f,-4.81f,Mathf.Min(x+2.97f,length/2),.01f,-4.65f,6,6);
             }
+        }
+
+        public void Blade(float x,int sign)
+        {
+            Solid(x-.12f,5.5f,-1.49f,x+.12f,5.68f,1.34f,5,5);
+            Solid(x-.19f,3.63f,-1.56f,x+.19f,5.48f,-.36f,sign,5);
+        }
+
+        public void CityTower(float width,float depth,int floors,Random rng,int sign)
+        {
+            float l=-width/2,r=width/2;
+            Solid(l,0,0,r,5,depth,6,491);
+            Panel(l+.25f,.3f,r-.25f,3.6f,-.025f,495+rng.Next(4));
+            Panel(l+.4f,3.65f,r-.4f,4.75f,-.035f,sign);
+            int glass=115+rng.Next(13), bays=Mathf.Max(3,(int)(width/3.7f));
+            for(int i=0;i<floors;i++){
+                float y=5+i*2.85f,f=i>floors*.68f?1.9f:.4f;
+                float inset=i>floors*.68f?1.05f:.22f;
+                Solid(l+inset,y,f,r-inset,y+2.85f,depth,2,6);
+                for(int j=0;j<bays;j++){
+                    float span=(width-2*inset)/bays,a=l+inset+j*span;
+                    Panel(a+.05f,y+.12f,a+span-.05f,y+2.74f,f-.023f,glass);
+                }
+                float top=y+2.71f;
+                Solid(l+inset-.07f,top,f-.16f,r-inset+.07f,top+.14f,depth,6,6);
+                foreach(int side in new[]{-1,1}){
+                    float x=side<0?l+inset-.015f:r-inset+.015f;
+                    float a=side<0?depth-.35f:f+.35f,b=side<0?f+.35f:depth-.35f;
+                    Face(new(x,y+.25f,a),new(x,top,a),new(x,top,b),new(x,y+.25f,b),glass);
+                }
+            }
+            float roof=5+floors*2.85f;
+            Solid(l+.9f,roof,3,r-.9f,roof+.64f,depth-.3f,2,491);
+            Solid(l+2,roof+.6f,depth*.49f,r-2,roof+2.75f,depth-1.4f,6,491);
         }
 
         public void Apartment(float w,float d,int floors,int finish)

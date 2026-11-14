@@ -1,0 +1,4 @@
+MakeHuman-derived commuter figures sourced from OpenRCsimulator. Selected MakeHuman source assets are CC0, including Anrico's sitting pose. In this project the meshes have been converted to FBX and standing figures have two additional walking poses.
+https://github.com/bultodepapas/OpenRCsimulator/tree/main/app/assets/scenery/population/people
+https://github.com/bultodepapas/OpenRCsimulator/blob/main/assets/scenery/population/HUMAN_LICENSES.md
+https://creativecommons.org/publicdomain/zero/1.0/

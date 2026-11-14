@@ -1,0 +1,511 @@
+{
+  "format": "openrc-human-population-sources-v1",
+  "step": "LU-21",
+  "observed_on": "2026-10-12",
+  "status": "Three poses integrated and native-verified in Godot 4.7.2 Compatibility; final evidence in docs/research/landscape-upgrade/LU-21/README.md.",
+  "toolchain": {
+    "blender": "5.2.2",
+    "mpfb": "2.0.18",
+    "runtime_dependency": "None; the app consumes static glTF-derived mesh and texture assets only.",
+    "recipe": "tools/scenery/population/generate_people.py",
+    "recipe_license": "MIT"
+  },
+  "source_archives": [
+    {
+      "id": "mpfb2",
+      "version": "2.0.18",
+      "url": "https://github.com/makehumancommunity/mpfb2/releases/tag/v2.0.18",
+      "downloaded_archive": ".tools/lu21-human-research/mpfb2-v2.0.18.zip",
+      "bytes": 45601989,
+      "sha256": "ADA7C4FF11E79CF6ED9B441BCCABC52C9359F2848B988F66E89C14C30B21FED7",
+      "license": "GPL-3.0-or-later; authoring tool only"
+    },
+    {
+      "id": "makehuman_system_assets",
+      "url": "https://files2.makehumancommunity.org/asset_packs/makehuman_system_assets/makehuman_system_assets_cc0.zip",
+      "catalog": "https://static.makehumancommunity.org/assets/assetpacks/makehuman_system_assets.html",
+      "downloaded_archive": ".tools/lu21-human-research/makehuman_system_assets_cc0.zip",
+      "bytes": 280737770,
+      "sha256": "B542127A8E25547C7C29C19F2D1D2ADB9A664C80396ECD694095DBC8028A0107",
+      "license": "CC0-1.0"
+    },
+    {
+      "id": "makehuman_system_poses",
+      "url": "https://files2.makehumancommunity.org/asset_packs/makehuman_system_poses/makehuman_system_poses_cc0.zip",
+      "catalog": "https://static.makehumancommunity.org/assets/assetpacks/makehuman_system_poses.html",
+      "downloaded_archive": ".tools/lu21-human-research/makehuman_system_poses_cc0.zip",
+      "bytes": 820410,
+      "sha256": "C4675523714854D86B2FC1315BAE152646254B0BADFCE8E9AD0CF624D9EF5689",
+      "license": "CC0-1.0"
+    },
+    {
+      "id": "poses01",
+      "url": "https://files2.makehumancommunity.org/asset_packs/poses01/poses01_cc0.zip",
+      "catalog": "https://static.makehumancommunity.org/assets/assetpacks/poses01.html",
+      "downloaded_archive": ".tools/lu21-human-research/poses01_cc0.zip",
+      "bytes": 1207533,
+      "sha256": "67B1D14923ADDA85F371F81E1C529FCD058F975D0BF93848838E1A3860705B7D",
+      "license": "CC0-1.0"
+    }
+  ],
+  "source_assets": [
+    {
+      "pack": "makehuman_system_assets",
+      "catalog_author": "makehuman_system",
+      "catalog_license": "CC0-1.0",
+      "catalog_url": "https://static.makehumancommunity.org/assets/assetpacks/makehuman_system_assets.html",
+      "assets": [
+        {
+          "name": "male1591",
+          "type": "proxy",
+          "file": "source/makehuman_system_assets/proxymeshes/male1591/male1591.proxy",
+          "bytes": 108133,
+          "sha256": "6FC9A44FC19DCACE1BEE1199555AF0BC26C9CE76571843CCF47300FD16B647E2"
+        },
+        {
+          "name": "middleage_caucasian_male",
+          "type": "skin material",
+          "file": "source/makehuman_system_assets/skins/middleage_caucasian_male/middleage_caucasian_male.mhmat",
+          "bytes": 1469,
+          "sha256": "113326B7670CB273610314B91E2597B228711ADF5F0666660B16FEF269BFBE72"
+        },
+        {
+          "name": "low-poly",
+          "type": "eyes",
+          "file": "source/makehuman_system_assets/eyes/low-poly/low-poly.mhclo",
+          "bytes": 1344,
+          "sha256": "68582E28E9176CBA7CFCF35208F671B6201B8D1BC95C32DECFF61A3160EC34D8"
+        },
+        {
+          "name": "eyebrow001",
+          "type": "eyebrows",
+          "file": "source/makehuman_system_assets/eyebrows/eyebrow001/eyebrow001.mhclo",
+          "bytes": 9141,
+          "sha256": "54C8892C2BA577F4152D779CE1F20F7CD323BEB8CBD9CB701796165C221B4F5B"
+        },
+        {
+          "name": "eyebrow001",
+          "type": "material",
+          "file": "source/makehuman_system_assets/eyebrows/eyebrow001/eyebrow001.mhmat",
+          "bytes": 1098,
+          "sha256": "976E5F4F1D3922D7A11C6E2DB233F8B4584B068D00619D5749687E81C92D61FC"
+        },
+        {
+          "name": "short01",
+          "type": "hair",
+          "file": "source/makehuman_system_assets/hair/short01/short01.mhclo",
+          "bytes": 201588,
+          "sha256": "AE1FFAA98DA5753B803B3A173BEDE4895D2215E6BB94763F3765A71F0E984F35"
+        },
+        {
+          "name": "short01",
+          "type": "material",
+          "file": "source/makehuman_system_assets/hair/short01/short01.mhmat",
+          "bytes": 1314,
+          "sha256": "01E2E12CE3F3D3C859225456660ACADCDD27D4F4B4D888BCBD6F11998CADD975"
+        },
+        {
+          "name": "male_casualsuit04",
+          "type": "clothes",
+          "file": "source/makehuman_system_assets/clothes/male_casualsuit04/male_casualsuit04.mhclo",
+          "bytes": 116682,
+          "sha256": "8C1A2D3272CD51BA03F0840D593EDDC6325D3D2C4C8529F8203D2C2CAD3D0CEF"
+        },
+        {
+          "name": "male_casualsuit04",
+          "type": "material",
+          "file": "source/makehuman_system_assets/clothes/male_casualsuit04/male_casualsuit04.mhmat",
+          "bytes": 1396,
+          "sha256": "0408DEA995C10E078AB79A3B68FA3092BDF18D3241B74FA35D48FE5397B42430"
+        },
+        {
+          "name": "shoes02",
+          "type": "shoes",
+          "file": "source/makehuman_system_assets/clothes/shoes02/shoes02.mhclo",
+          "bytes": 110217,
+          "sha256": "0D447FD6B7415D6B2603E91697336EE51AC2F00EF85878D6667E9ACFB45A20FE"
+        },
+        {
+          "name": "shoes02",
+          "type": "material",
+          "file": "source/makehuman_system_assets/clothes/shoes02/shoes02.mhmat",
+          "bytes": 1184,
+          "sha256": "7F2CB19506784FBE22BA3F766F94BB13D1EEE1712DD29ED10B926C5905BAB924"
+        }
+      ]
+    },
+    {
+      "pack": "makehuman_system_poses",
+      "catalog_author": "MakeHuman / makehuman_system",
+      "catalog_license": "CC0-1.0",
+      "catalog_url": "https://static.makehumancommunity.org/assets/assetpacks/makehuman_system_poses.html",
+      "asset": "standing02",
+      "file": "source/poses/standing02/standing02.bvh",
+      "bytes": 42275,
+      "sha256": "8AC8B0E6CB72CA1CB56A87B8E51E0E1490CA7FB1F0BFC106E8FB5EC9E0080043",
+      "metadata": "source/poses/standing02/standing02.meta",
+      "metadata_sha256": "E8901FF696AE3ADDEBA0D7AB8B239757097CBF8E75AC6E757842B58895A8F6DB"
+    },
+    {
+      "pack": "poses01",
+      "catalog_author": "Anrico",
+      "catalog_license": "CC0-1.0",
+      "catalog_url": "https://static.makehumancommunity.org/assets/assetpacks/poses01.html",
+      "asset_page": "http://www.makehumancommunity.org/node/2217",
+      "asset": "anrico_sitting03",
+      "description": "A sitting pose on a chair.",
+      "file": "source/poses/anrico_sitting03/anrico_sitting03.bvh",
+      "bytes": 44119,
+      "sha256": "A3813600C29732081074B0138AAF7547C4A7F9DC74A885432D3C0A7577F5902D",
+      "metadata": "source/poses/anrico_sitting03/anrico_sitting03.meta",
+      "metadata_sha256": "8EB58662CFB75D54E0D36C47B1BB91A22FAC5BC89FFFCC8FFE6C23AF4D2A05ED",
+      "thumbnail": "source/poses/anrico_sitting03/anrico_sitting03.thumb",
+      "thumbnail_sha256": "5AE03C7EE139B77AF5277EFC1277CBD72F6A207D466F4B09BE7EAC4BAF2DF9A6"
+    }
+  ],
+  "generated_textures": [
+    {
+      "file": "brown_eye.png",
+      "bytes": 71364,
+      "sha256": "A37E1A54F61EC20D0A00B962EE75A620260EB686319F61463A479440EDA902B7"
+    },
+    {
+      "file": "eyebrow001.png",
+      "bytes": 27403,
+      "sha256": "10C8FF3AC95BCFDCD65D6A0E24F69C626898871B572DF4588ED78D3C6ADECE03"
+    },
+    {
+      "file": "male_casualsuit04_diffuse.png",
+      "bytes": 891916,
+      "sha256": "D2C5FA34F5909AF635400FB03FC366C202761E0EAD4D04165B6CD82565035826"
+    },
+    {
+      "file": "male_casualsuit04_normal.png",
+      "bytes": 584631,
+      "sha256": "3EDA9D7A08E5EB7F786BF00E88D0F33BC2DD764C89A5754AE03AAF77E47714A6"
+    },
+    {
+      "file": "middleage_lightskinned_male_diffuse.png",
+      "bytes": 1101557,
+      "sha256": "B87763C35DC9C0242D7EB4ADDB7D0F856B4F161357903A071BACD257FA0B5B90"
+    },
+    {
+      "file": "shoes02_diffuse.png",
+      "bytes": 1282057,
+      "sha256": "EFEF94EA34B0E0C2283095CB47A9E0389B55449C61A4F4972D0AD4D2BF06B4F0"
+    },
+    {
+      "file": "short01_diffuse.png",
+      "bytes": 308642,
+      "sha256": "E6BD9C9C0C30D9D2A0AA576A84672671D0A81C005488C71027121E07937BE50A"
+    }
+  ],
+  "review_exports": [
+    {
+      "pose": "standing",
+      "source_pose": "standing02",
+      "gltf": {
+        "file": ".tools/lu21-human-research/posed-assets/person_standing.gltf",
+        "bytes": 9725,
+        "sha256": "83031F3049705BCCF9FAEAD9A4B69574B13EA5BCE936C9D316FE3ED4C7E2545C"
+      },
+      "buffer": {
+        "file": ".tools/lu21-human-research/posed-assets/person_standing.bin",
+        "bytes": 208796,
+        "sha256": "61955D7EC62D2C77228662FF3D404290FBECA3FBEE60C467E74D68BF4938F783"
+      },
+      "triangles": 7332,
+      "mesh_objects": 6,
+      "surfaces": 6,
+      "materials": 6,
+      "nodes": 7,
+      "godot_bounds_m": {
+        "min": [
+          -0.309751,
+          0.0,
+          -0.164977
+        ],
+        "max": [
+          0.309751,
+          1.75,
+          0.164977
+        ],
+        "size": [
+          0.619502,
+          1.75,
+          0.329953
+        ]
+      }
+    },
+    {
+      "pose": "seated",
+      "source_pose": "anrico_sitting03",
+      "gltf": {
+        "file": ".tools/lu21-human-research/posed-assets/person_seated.gltf",
+        "bytes": 9730,
+        "sha256": "1DB1365BEB4EF35F96E47951064569E16E6D4E3589753DD631088FE522E3059A"
+      },
+      "buffer": {
+        "file": ".tools/lu21-human-research/posed-assets/person_seated.bin",
+        "bytes": 208992,
+        "sha256": "4906E7AC7F6FBDA3CB7A5628B3C9278967F44CA3A9A93843A34D79E96513AD63"
+      },
+      "triangles": 7333,
+      "mesh_objects": 6,
+      "surfaces": 6,
+      "materials": 6,
+      "nodes": 7,
+      "godot_bounds_m": {
+        "min": [
+          -0.293644,
+          0.0,
+          -0.362583
+        ],
+        "max": [
+          0.293644,
+          1.443456,
+          0.362583
+        ],
+        "size": [
+          0.587287,
+          1.443456,
+          0.725167
+        ]
+      },
+      "bench_contact": {
+        "y_m": 0.47421,
+        "bench_surface_y_m": 0.48,
+        "sample_count": 375,
+        "measurement": "Lowest rear-buttock/upper-thigh imported vertices in the seated region; feet are at y=0."
+      }
+    },
+    {
+      "pose": "pilot",
+      "source_pose": "standing02 plus project-scripted arm IK and transmitter",
+      "gltf": {
+        "file": ".tools/lu21-human-research/posed-assets/person_pilot.gltf",
+        "bytes": 11162,
+        "sha256": "11424E514FC542D203767A783E92663A7A68AF668D2B039AEABE05A3112C9190"
+      },
+      "buffer": {
+        "file": ".tools/lu21-human-research/posed-assets/person_pilot.bin",
+        "bytes": 246580,
+        "sha256": "467FC4E3CCEC8766DAFC357104685270BBFD78F804ABD7CA6F1785D89344EBC9"
+      },
+      "triangles": 7880,
+      "mesh_objects": 7,
+      "surfaces": 7,
+      "materials": 7,
+      "nodes": 8,
+      "godot_bounds_m": {
+        "min": [
+          -0.323774,
+          0.0,
+          -0.217037
+        ],
+        "max": [
+          0.323774,
+          1.75,
+          0.217037
+        ],
+        "size": [
+          0.647549,
+          1.75,
+          0.434074
+        ]
+      },
+      "project_authored_transmitter_triangles": 548
+    }
+  ],
+  "shared_texture_bytes": 4267570,
+  "runtime_limits": {
+    "all_poses_static": true,
+    "skeletons": 0,
+    "animation_players": 0,
+    "textures_shared_by_hash": true,
+    "front_direction_godot": "-Z; confirmed visually in the integrated isolated field scene by the landscape lead",
+    "limitation": "These three poses use the same adult male body, outfit, skin and hair. The pilot's fingers are relaxed/open around the transmitter. Runtime motion and placement are owned by the scenery integration."
+  },
+  "checks": {
+    "engine": "Godot 4.7.2 stable, Compatibility renderer",
+    "isolated_probe_log": ".tools/lu21-human-research/godot-probe-final/inspect-final.log",
+    "result": "PASS: all three scenes imported; geometry, materials, bounds and absence of runtime skeleton/animation verified.",
+    "external_user_file": {
+      "path": "%APPDATA%/Blender Foundation/Blender/5.2/mpfb/config/log_levels.json",
+      "bytes": 14,
+      "content": "{\"default\": 3}",
+      "status": "A cleanup attempt was rejected by the environment; the file remains. No further removal was attempted. Later authoring runs used isolated Blender user directories."
+    }
+  },
+  "sc_hum_02_merged_runtime": {
+    "step": "SC-HUM-02",
+    "observed_on": "2026-10-24",
+    "pipeline": [
+      "tools/scenery/population/generate_people.py (unchanged; Linux run reproduces the LU-21 meshes, see SC-HUM-00)",
+      "tools/scenery/population/merge_people_atlas.py",
+      "tools/scenery/population/package_population.py"
+    ],
+    "toolchain": {
+      "blender": "5.2.2 LTS (linux-x64, release SHA-256 verified)",
+      "mpfb": "2.0.18"
+    },
+    "result": "Each pose is one mesh, one material and one draw surface (people: 19 -> 3 draw surfaces, triangles unchanged). Diffuse atlas 2112x2112 and normal atlas 1056x1056 are shared by all three poses; imported VRAM-compressed with mipmaps.",
+    "merged_exports": {
+      "standing": {
+        "gltf_sha256": "14eb5a8f8b6eabe760e5ef057140db63eb184e6296763b242e222c52c682ae8e",
+        "bin_sha256": "51fa77e59641d293e7783205f9b5df475e64d350e37afd47408f3a4cc0fed970"
+      },
+      "seated": {
+        "gltf_sha256": "a8a1accd8cc1fa2965b6103addbfbca37cbbb277eee3b8c16d0cfe6ce1d30fc3",
+        "bin_sha256": "5bd20de3650c8d8114f3bd646c45b77017ef29bc701d5fcda0523a266721ec6c"
+      },
+      "pilot": {
+        "gltf_sha256": "8d43e80e27efcbc6b1c98dfa3f5c254cafb1c47ddc5764736176c6ca259fba31",
+        "bin_sha256": "7e4efff24a174dd5e7eeef73b279ab71643ca9386b47242b74f52e57fcf38dd5"
+      }
+    },
+    "runtime_textures": [
+      {
+        "file": "textures/29796c1fe799a561b1737d7bc32c6f3b92f15c08bf8cb9eaf5c3f536e76d4018.png",
+        "sha256": "29796c1fe799a561b1737d7bc32c6f3b92f15c08bf8cb9eaf5c3f536e76d4018"
+      },
+      {
+        "file": "textures/0c6489795fe9f22b03ec411b96cf943a8bae9d204d59fa78b8d157da4e5628ec.png",
+        "sha256": "0c6489795fe9f22b03ec411b96cf943a8bae9d204d59fa78b8d157da4e5628ec"
+      }
+    ],
+    "retired_runtime_textures": [
+      "10c8ff3ac95bcfdcd65d6a0e24f69c626898871b572df4588ed78d3c6adece03",
+      "3eda9d7a08e5eb7f786bf00e88d0f33bc2dd764c89a5754ae03aaf77e47714a6",
+      "a37e1a54f61ec20d0a00b962ee75a620260eb686319f61463a479440eda902b7",
+      "b87763c35dc9c0242d7eb4addb7d0f856b4f161357903a071bacd257fa0b5b90",
+      "d2c5fa34f5909af635400fb03fc366c202761e0ead4d04165b6cd82565035826",
+      "e6bd9c9c0c30d9d2a0aa576a84672671d0a81c005488c71027121e07937be50a",
+      "efef94ea34b0e0c2283095cb47a9e0389b55449c61a4f4972d0ad4d2bf06b4f0"
+    ],
+    "evidence": "docs/research/scenery-implementation/SC-HUM-02/README.md"
+  },
+  "sc_hum_07_outfits": {
+    "step": "SC-HUM-07",
+    "observed_on": "2026-10-24",
+    "pipeline": [
+      "tools/scenery/population/generate_people.py --outfit tools/scenery/population/outfits/<id>.json",
+      "tools/scenery/population/merge_people_atlas.py -- --shared <dir> people <all outfit poses> (sources sorted by file name; reproducible byte for byte)",
+      "tools/scenery/population/package_population.py"
+    ],
+    "outfit_specs_sha256": {
+      "casual_jacket.json": "95947329655375db42a4363d4ba99970a9514174c1f9d72a8a5781aa6726cdec",
+      "casual_shirt.json": "b9ac43c6ffb979ffeeb6ab18f3d207f6d4ccc085cdc81bc024290641878074fb",
+      "mechanic_overalls.json": "da51c1ce4b6d9ab0ad532360e84f22ab7b4dadc94dcb02f41616adfd304151e1",
+      "pilot_polo.json": "78a44031a675cc0dbafb32146245eafe5e3695211c4f1b141c71857d50b2284e",
+      "veteran_cap.json": "11321f10cdbe3036eb83c0374f57d545897d4db5651c9bcc6d4b7da6a7d0d2f2",
+      "woman_tee.json": "fbe2fb8631a05a5cb8c9a35d11c28a1605ebdb71d457c990b595bd884cc086b2"
+    },
+    "poses": {
+      "pilot": [
+        "pilot_polo",
+        "veteran_cap (standing03 weight shift under the transmitter hold; SC-HUM-07-R6)"
+      ],
+      "standing": [
+        "casual_shirt (standing04, hand on hip; SC-HUM-07-R3)",
+        "woman_tee (standing03, weight on one leg; SC-HUM-07-R3)",
+        "casual_jacket",
+        "mechanic_overalls"
+      ],
+      "sitting": [
+        "woman_tee (callharvey3d_sittingnatural, poses01)",
+        "veteran_cap (anrico_sitting03)"
+      ],
+      "working": [
+        "mechanic_overalls",
+        "casual_shirt",
+        "woman_tee (SC-HUM-06: standing02 with a 7°+7° spine lean, 26° head/neck tilt and IK hands at 0.94 m)"
+      ]
+    },
+    "additional_cc0_archives": {
+      "pants01": {
+        "url": "https://files.makehumancommunity.org/asset_packs/pants01/pants01_cc0.zip",
+        "catalog": "https://static.makehumancommunity.org/assets/assetpacks/pants01.html",
+        "sha256": "e4e0ec60db34f279be291a83cfd7b342a7c5cf09bb7676682a5f39f4f6ac4ad9",
+        "bytes": 21908723,
+        "license": "CC0-1.0",
+        "evidence": "catalog per-asset CC0 and 'license CC0' in each used .mhclo; cortu_cargo_pants has no licence line in its .mhclo (catalog CC0 is the licence of record)"
+      },
+      "glasses01": {
+        "url": "https://files.makehumancommunity.org/asset_packs/glasses01/glasses01_cc0.zip",
+        "catalog": "https://static.makehumancommunity.org/assets/assetpacks/glasses01.html",
+        "sha256": "f215c58e09e31b7ee568c814067cb47704cee6da1f6fc01cffb8e9fca37bafdd",
+        "bytes": 5782729,
+        "license": "CC0-1.0",
+        "evidence": "catalog lists every used asset as CC0 (the pack is 'shared under CC0'); the licence of record. Audit 2026-10-25 (SC-HUM-07-R2): the .mhclo headers of frankyaye_glasses_library_male and kwnet_at_optical_glasses still carry legacy 'license AGPL3' text from before the CC0 release"
+      },
+      "shirts01": {
+        "url": "https://files.makehumancommunity.org/asset_packs/shirts01/shirts01_cc0.zip",
+        "catalog": "https://static.makehumancommunity.org/assets/assetpacks/shirts01.html",
+        "sha256": "a5a723b0e84a109bb190fcfeac7f1de4138d875da3e30fe5b3340eac9f38bcd3",
+        "bytes": 24479483,
+        "license": "CC0-1.0",
+        "evidence": "catalog per-asset CC0 and 'license CC0' in each used .mhclo"
+      },
+      "shoes01": {
+        "url": "https://files.makehumancommunity.org/asset_packs/shoes01/shoes01_cc0.zip",
+        "catalog": "https://static.makehumancommunity.org/assets/assetpacks/shoes01.html",
+        "sha256": "ded3f70428505eabbf1f6d7b5f61196a7366ef20757103d276ad0ed336c35ada",
+        "bytes": 82953569,
+        "license": "CC0-1.0",
+        "evidence": "catalog per-asset CC0 and 'license CC0' in each used .mhclo"
+      },
+      "bodyparts05": {
+        "url": "https://files.makehumancommunity.org/asset_packs/bodyparts05/bodyparts05_cc0.zip",
+        "catalog": "https://static.makehumancommunity.org/assets/assetpacks/bodyparts05.html",
+        "sha256": "262bba42246f85b2a91f493dd920296b258a3b4544eb495c91c4d08e57c528fd",
+        "bytes": 6616507,
+        "license": "CC0-1.0",
+        "evidence": "catalog lists every asset as CC0 ('A set of beards and moustaches shared under CC0'); used asset culturalibre_faun_beard ('# license CC-0' in its .mhclo). wdg_scruffy_beard (legacy AGPL3 header) is no longer used, from SC-HUM-07-R2"
+      }
+    },
+    "also_uses_pinned_archives": [
+      "makehuman_system_assets",
+      "poses01"
+    ],
+    "excluded": {
+      "toigo_maga_hat (hats01)": "political slogan",
+      "jujube_newsboy_cap (hats01)": "no material line in its .mhclo",
+      "female/male casualsuit with the MakeHuman logo": "branding",
+      "toigo_flats": "25,920 triangles after decimation",
+      "male_casualsuit06 MakeHuman logo": "kept: the CC0 tee is used with its logo patched out by generate_people.py (outfit texture_patches, SC-HUM-07-R1)"
+    },
+    "runtime": "app/assets/scenery/population/people/: eight GLBs, one 2720x4064 diffuse and one 1360x2032 normal atlas (VRAM-compressed, mipmaps)",
+    "retires": "SC-HUM-02 standing/sitting/pilot GLBs and their atlas (the LU-21 person stays reproducible from the default recipe)",
+    "evidence": "docs/research/scenery-implementation/SC-HUM-07/README.md; work poses: docs/research/scenery-implementation/SC-HUM-06/README.md",
+    "runtime_textures": [
+      "422b4a26924743194596fa3df3609a45594da959344a5448ed498a4e14ad8206.png",
+      "2bf58eced3b3df3b099ac9307e5456f0ff1ca1e123d7bd7ee6db4b3900c7cf80.png"
+    ]
+  },
+  "sc_hum_01_transmitter": {
+    "step": "SC-HUM-01",
+    "observed_on": "2026-10-24",
+    "delivery": "assets/source-deliveries/radiolink-t12d/ (owner draft; the final model replaces it in place)",
+    "files": {
+      "Radiolink_T12D.blend": {
+        "sha256": "8bae3db01812fb6bf6ff2b36696ba80e7fa5db261ff83c399db0330e83f530c6",
+        "bytes": 901807
+      },
+      "Radiolink_T12D.glb": {
+        "sha256": "eecd1e5887ad395092f199d8565d826ad7f6baa16ca7976c4473597de5f8496e",
+        "bytes": 3458880
+      }
+    },
+    "author": "repository owner (supplied for this project)",
+    "license": "owner-authored for OpenRC Simulator; redistribution terms to be confirmed by the owner",
+    "used_by": [
+      "pilot/pilot_polo",
+      "pilot/veteran_cap"
+    ],
+    "recipe": "tools/scenery/population/generate_people.py --pose pilot (import_transmitter): parts under T12D_root at least 10 mm, bevels dropped, planar merge, area-weighted collapse to about 1.1k triangles, rigid class 4 in the merged atlas",
+    "hold": "Mode 2: thumb tips on both stick tips (IK), fingers fitted 2-4 mm outside the transmitter surface (SC-HUM-07-R7); face elevated 35 degrees toward the eyes, gimbal midpoint 0.255 m ahead of and 1.11 m above the feet; black nylon neck strap (240 triangles) from a loop on the shirt below the head-turn band to the handle (SC-HUM-07-R8)",
+    "pilot_depth_m": 0.465,
+    "prefab_envelope": "person_pilot depth 0.45 -> 0.47 m (SC-HUM-01) -> 0.57 m (SC-HUM-07-R6 veteran weight-shift stance, 0.556 m); the collision capsule radius (0.335 m from the 0.67 m width) is unchanged"
+  }
+}

@@ -80,7 +80,7 @@ namespace LineFour.Streets
 
             public void Street(int side,bool distant)
             {
-                var rng=new Random(RouteSchedule.Ids[station]*1319+(side+2)*67+(distant?7919:0));
+                var rng=new Random(RouteSchedule.Ids[station]*1877+(side+2)*67+(distant?7919:0));
                 var stops=RouteSchedule.Stops;
                 float begin=station==0?-260:(stops[station-1]-stops[station])*.5f;
                 float end=station==stops.Length-1?150:(stops[station+1]-stops[station])*.5f;
@@ -108,6 +108,7 @@ namespace LineFour.Streets
             void AddBlock(Random rng,int side,bool distant,int block,float center,float length)
             {
                 var g=new StreetMesh();
+                bool core=Mathf.Abs(center+70)<210;
                 g.Pavement(length);
                 float x=-length/2;
                 int lot=0;
@@ -125,6 +126,7 @@ namespace LineFour.Streets
                         Market=>rng.Next(1,4),Workshop=>rng.Next(1,3),Office=>rng.Next(4,8),
                         Arcade=>rng.Next(3,6),Terrace=>rng.Next(3,6),_=>rng.Next(2,5)
                     };
+                    if(core && !distant)floors+=rng.Next(2,5);
                     if(distant&&kind==Office)floors++;
                     var palette=Palette[(int)kind];
                     int sign=rng.Next(4)==0?16+rng.Next(16):128+rng.Next(357);
@@ -144,7 +146,24 @@ namespace LineFour.Streets
                     x+=width;count++;lot++;forms.Add(kind);
                     if(!distant)nearCount++;
                 }
-                g.Furnish(length,rng,distant);
+                g.Furnish(length,rng,distant,core);
+                if(core || distant){
+                    float start=-length/2+1;
+                    while(start<length/2-8){
+                        float width=Mathf.Min(Range(rng,13,23),length/2-start);
+                        float lane=distant?Range(rng,21,23):Range(rng,22,23);
+                        g.Origin(start+width/2,lane);
+                        int sign=128+rng.Next(357);
+                        if(distant)g.CityTower(width-.8f,Range(rng,12,16),rng.Next(core?12:7,core?24:14),rng,sign);
+                        else g.Building(rng,rng.Next(2)==0?Arcade:Studio,width-.65f,12,rng.Next(5,10),Palette[3][rng.Next(4)],sign,16+rng.Next(16),false);
+                        count++;start+=width;
+                    }
+                }
+                if(core && !distant){
+                    g.Origin(0,0);
+                    for(float signX=-length/2+5;signX<length/2-2;signX+=11+rng.Next(7))
+                        g.Blade(signX,128+rng.Next(357));
+                }
                 string name=$"{RouteSchedule.Ids[station]}_{(side<0?"W":"E")}_{(distant?"Rear":"HighSt")}_{block}";
                 float lateral=distant?Range(rng,66,70):Range(rng,22.0f,23.55f);
                 SaveBlock(g,name,side,lateral,center,distant);
@@ -176,6 +195,10 @@ namespace LineFour.Streets
                 var row=new GameObject(name,typeof(MeshFilter),typeof(MeshRenderer));
                 row.transform.SetParent(parent,false);
                 row.transform.localPosition=new Vector3((side>0?5.3f:0)+side*lateral,surface,center);
+                if(station<4 && !name.EndsWith("_Ground")){
+                    if(worldZ+halfSpan>RouteSchedule.Stops[station]-245 && worldZ-halfSpan<RouteSchedule.Stops[station]+48)
+                        row.transform.localPosition+=Vector3.right*(side*85);
+                }
                 row.transform.localRotation=Quaternion.Euler(0,side*90,0);
                 row.GetComponent<MeshFilter>().sharedMesh=stored;
                 var renderer=row.GetComponent<MeshRenderer>();renderer.sharedMaterial=material;
@@ -190,7 +213,7 @@ namespace LineFour.Streets
         }
 
         [MenuItem("Tools/Line 4/Build station shopping streets")]
-        static void Build()
+        internal static void Build()
         {
             var scene=SceneManager.GetActiveScene();
             if(scene.path!="Assets/Scene/Oido_Run.unity")throw new InvalidOperationException("Open Oido_Run");

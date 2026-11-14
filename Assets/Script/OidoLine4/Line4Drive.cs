@@ -89,6 +89,7 @@ namespace LineFour.Oido
         public readonly RunState run = new RunState();
         public int View { get; private set; }
         private Vector3 origin;
+        LODGroup[] carLods;
         private Font font;
         private GUIStyle style;
         private AudioSource rolling, chime;
@@ -101,6 +102,7 @@ namespace LineFour.Oido
         void Start()
         {
             origin = consist.position;
+            carLods=consist.GetComponentsInChildren<LODGroup>();
             font = Font.CreateDynamicFontFromOSFont(new[] {"Malgun Gothic","Apple SD Gothic Neo","Noto Sans CJK KR","Arial"}, 24);
             rolling = gameObject.AddComponent<AudioSource>(); chime = gameObject.AddComponent<AudioSource>();
             rolling.clip = MakeSound(false); rolling.loop = true; rolling.volume=0; rolling.Play();
@@ -155,8 +157,8 @@ namespace LineFour.Oido
                 passengers.Display(run); return;
             }
             if (Input.GetKeyDown(KeyCode.C)) CycleView();
-            if (Input.GetKeyDown(KeyCode.F)) yaw=pitch=0;
-            if (View!=0 && Input.GetMouseButtonDown(1)) { Cursor.lockState=CursorLockMode.Locked; Cursor.visible=false; }
+            if (Input.GetKeyDown(KeyCode.F)) {yaw=pitch=0;orbitDistance=42;}
+            if (Input.GetMouseButtonDown(1)) { Cursor.lockState=CursorLockMode.Locked; Cursor.visible=false; }
             if (!Input.GetMouseButton(1) || Input.GetKeyDown(KeyCode.Escape)) ReleaseMouse();
             else if (Cursor.lockState==CursorLockMode.Locked) {
                 TurnView(Input.GetAxisRaw("Mouse X")*2.8f,-Input.GetAxisRaw("Mouse Y")*2.8f);
@@ -168,8 +170,11 @@ namespace LineFour.Oido
             if (Input.GetKeyDown(KeyCode.E)) {
                 var was=run.Phase; run.Service(); if(was!=run.Phase) chime.Play();
             }
-            power=Input.GetKey(KeyCode.W)||Input.GetKey(KeyCode.UpArrow);
-            brake=Input.GetKey(KeyCode.S)||Input.GetKey(KeyCode.DownArrow);
+            if(View==2)Walk(new Vector2((Input.GetKey(KeyCode.D)?1:0)-(Input.GetKey(KeyCode.A)?1:0),
+                (Input.GetKey(KeyCode.W)?1:0)-(Input.GetKey(KeyCode.S)?1:0)),Time.deltaTime);
+            if(View==0)orbitDistance=Mathf.Clamp(orbitDistance-Input.mouseScrollDelta.y*3,14,92);
+            power=(View!=2 && Input.GetKey(KeyCode.W))||Input.GetKey(KeyCode.UpArrow);
+            brake=(View!=2 && Input.GetKey(KeyCode.S))||Input.GetKey(KeyCode.DownArrow);
             emergency=Input.GetKey(KeyCode.Space);
             run.Step(Time.deltaTime,power,brake,emergency);
             float weight=100*Mathf.SmoothStep(0,1,run.DoorTravel);
@@ -184,18 +189,39 @@ namespace LineFour.Oido
             UpdateCamera();
         }
 
+        Vector3 saloonEye=new Vector3(0,2.82f,-5.4f);
+        float orbitDistance=42;
+        void Walk(Vector2 input,float dt)
+        {
+            Vector3 delta=Quaternion.Euler(0,180+yaw,0)*new Vector3(input.x,0,input.y);
+            saloonEye+=Vector3.ClampMagnitude(delta,1)*dt*2.3f;
+            saloonEye.z=Mathf.Clamp(saloonEye.z,-201.1f,-3.3f);
+            float boundary=Mathf.Abs(Mathf.Repeat(-saloonEye.z+.24f,20.48f)-10.24f);
+            float halfWidth=boundary>8.8f?.35f:.48f;
+            saloonEye.x=Mathf.Clamp(saloonEye.x,-halfWidth,halfWidth);
+        }
+
         void UpdateCamera()
         {
             Vector3 nose=consist.position;
+            if(carLods!=null)foreach(var group in carLods){
+                float center=group.transform.position.z-nose.z;
+                group.ForceLOD(View==2 && Mathf.Abs(center-saloonEye.z)<26?0:-1);
+            }
             Vector3 eye, aim;
-            if (View==1) { eye=new Vector3(.57f,CabEyeHeight,cabEyeZ); aim=eye+new Vector3(0,-.035f,1)*25; }
-            else if (View==2) { eye=new Vector3(0,2.52f,-5.4f); aim=eye+new Vector3(0,-.02f,-1)*12; }
-            else { eye=new Vector3(12,30,14); aim=new Vector3(0,1.9f,-18); }
+            if (View==1) { eye=new Vector3(.36f,CabEyeHeight,cabEyeZ-.16f); aim=eye+new Vector3(0,-.13f,1)*25; }
+            else if (View==2) { eye=saloonEye; aim=eye+new Vector3(0,-.02f,-1)*12; }
+            else {
+                aim=new Vector3(0,1.9f,-18);
+                eye=aim+Quaternion.Euler(-Mathf.Clamp(39+pitch,10,79),20+yaw,0)*Vector3.forward*orbitDistance;
+                cabCamera.transform.SetPositionAndRotation(nose+eye,Quaternion.LookRotation(aim-eye));
+                return;
+            }
             cabCamera.transform.SetPositionAndRotation(nose+eye,Quaternion.LookRotation(aim-eye)*Quaternion.Euler(pitch,yaw,0));
         }
         public void TurnView(float horizontal,float vertical)
         {
-            if(View==0) return;
+
             yaw=Mathf.Repeat(yaw+horizontal+180,360)-180;
             pitch=Mathf.Clamp(pitch+vertical,-75,75);
             UpdateCamera();
@@ -273,8 +299,8 @@ namespace LineFour.Oido
             Label(178,h-70,250,26,emergency?"비상 제동":run.Doors?"출입문 열림":brake?"제동":power?"가속":"타행 / 대기",14,Blue);
             RectColor(43,h-44,113,4,new Color(.23f,.32f,.37f)); RectColor(43,h-44,113*run.Speed/18,4,Blue);
             RectColor(w-442,h-97,418,73,Ink);
-            Label(w-425,h-94,397,31,"W 가속     S 제동     Space 비상 제동     E 승하차",15,Color.white,true);
-            Label(w-425,h-61,410,26,View==0?"외부 상공 고정    C 운전석으로    R 재시작":"C 시점    우클릭 드래그 둘러보기    F 정면    R 재시작",14,Pale);
+            Label(w-425,h-94,397,31,View==2?"WASD 객실 이동    ↑ 가속    ↓ 제동    E 승하차":"W 가속     S 제동     Space 비상 제동     E 승하차",15,Color.white,true);
+            Label(w-425,h-61,410,26,View==0?"우클릭 회전   휠 거리   F 초기화   C 운전석":"C 시점    우클릭 드래그 둘러보기    F 정면    R 재시작",14,Pale);
             if(run.Complete){
                 float x=w*.5f-207,y=h*.5f-86;
                 RectColor(x,y,414,172,Ink);

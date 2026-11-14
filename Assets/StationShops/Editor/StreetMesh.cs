@@ -44,7 +44,7 @@ namespace LineFour.Streets
         {
             // One continuous roadbed under the lots, side streets and both ranks.
             float bottom=elevated?-8.45f:-.31f;
-            Solid(begin,bottom,-8.85f,end,-.17f,63,4,48);
+            Solid(begin,bottom,-8.85f,end,-.17f,96,4,48);
         }
 
         public void Pavement(float length)
