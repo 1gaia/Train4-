@@ -58,6 +58,8 @@ namespace LineFour.Oido.EditorTools
                 var sim=UnityEngine.Object.FindFirstObjectByType<Line4Drive>();
                 if(!sim || !sim.cabCamera.isActiveAndEnabled || sim.consist.GetComponentsInChildren<LODGroup>().Length!=10) return;
                 if(verificationStage==0) {
+                    if(sim.Opening) sim.BeginRun();
+                    while(sim.View!=0) sim.CycleView();
                     ScreenCapture.CaptureScreenshot(Path.GetFullPath("Library/AnsanLine_Aerial.png"));
                     Quaternion before=sim.cabCamera.transform.rotation;
                     sim.TurnView(35,12);

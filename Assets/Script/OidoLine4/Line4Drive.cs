@@ -73,13 +73,16 @@ namespace LineFour.Oido
 
     public sealed class Line4Drive : MonoBehaviour
     {
+        const float CabEyeHeight = 2.89f;
+
         public Transform consist;
         public Camera cabCamera;
         public SkinnedMeshRenderer[] doorCars;
         public int[] platformShapes;
-        public float cabEyeZ = -1.7f;
+        public float cabEyeZ = -1.88f;
         public float[] passengerDoors;
         public Shader passengerFabric;
+        [SerializeField] PlatformScreenDoors oidoScreenDoors;
         PassengerFlow passengers;
         public bool Opening { get; private set; }=true;
         float titleTime;
@@ -106,7 +109,13 @@ namespace LineFour.Oido
             passengers.Prepare(passengerDoors,consist,passengerFabric);
             UpdateCamera();
         }
-        public void BeginRun() { Opening=false;UpdateCamera(); }
+        public void BeginRun()
+        {
+            Opening = false;
+            View = 1;
+            yaw = pitch = 0;
+            UpdateCamera();
+        }
         public void ReplayOpening()
         {
             if(!run.Complete)return;
@@ -166,6 +175,7 @@ namespace LineFour.Oido
             float weight=100*Mathf.SmoothStep(0,1,run.DoorTravel);
             if(weight!=lastDoorWeight) {
                 for(int i=0;i<doorCars.Length;i++) doorCars[i].SetBlendShapeWeight(platformShapes[i],weight);
+                if (oidoScreenDoors) oidoScreenDoors.SetOpening(run.Target == 0 ? weight / 100f : 0);
                 lastDoorWeight=weight;
             }
             consist.position=origin+Vector3.forward*run.Distance;
@@ -176,9 +186,9 @@ namespace LineFour.Oido
 
         void UpdateCamera()
         {
-            Vector3 nose=Vector3.forward*run.Distance;
+            Vector3 nose=consist.position;
             Vector3 eye, aim;
-            if (View==1) { eye=new Vector3(.57f,3.03f,cabEyeZ); aim=eye+new Vector3(0,-.055f,1)*25; }
+            if (View==1) { eye=new Vector3(.57f,CabEyeHeight,cabEyeZ); aim=eye+new Vector3(0,-.035f,1)*25; }
             else if (View==2) { eye=new Vector3(0,2.52f,-5.4f); aim=eye+new Vector3(0,-.02f,-1)*12; }
             else { eye=new Vector3(12,30,14); aim=new Vector3(0,1.9f,-18); }
             cabCamera.transform.SetPositionAndRotation(nose+eye,Quaternion.LookRotation(aim-eye)*Quaternion.Euler(pitch,yaw,0));

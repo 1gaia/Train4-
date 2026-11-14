@@ -124,10 +124,11 @@ namespace LineFour.Oido.EditorTools
             var sim=Object.FindFirstObjectByType<Line4Drive>();if(!sim||Time.frameCount<frame)return;
             var flow=sim.GetComponent<PassengerFlow>();if(!flow)return;
             if(stage==0){
-                Check(sim.Opening && flow.VisibleCount==14,"Opening with waiting passengers");sim.BeginRun();sim.CycleView();
-                Check(Mathf.Abs(sim.cabCamera.transform.position.y-3.03f)<.01f,"Raised cab");stage++;frame=Time.frameCount+2;
+                Check(sim.Opening && flow.VisibleCount==18,"Opening with waiting passengers");sim.BeginRun();
+                Vector3 eye=sim.cabCamera.transform.position-sim.consist.position;
+                Check(sim.View==1 && Vector3.Distance(eye,new Vector3(.57f,2.89f,sim.cabEyeZ))<.01f,"Seated cab");stage++;frame=Time.frameCount+2;
             }else if(stage==1){
-                ScreenCapture.CaptureScreenshot(Path.GetFullPath("Library/Line4_RaisedCab.png"));sim.run.Service();stage++;
+                ScreenCapture.CaptureScreenshot(Path.GetFullPath("Library/Line4_SeatedCab.png"));sim.run.Service();stage++;
             }else if(stage==2 && flow.WalkingCount>0){
                 Check(sim.run.Score==25,"Live boarding bonus");stage++;
             }else if(stage==3 && sim.run.Dwell>=3){
@@ -136,7 +137,7 @@ namespace LineFour.Oido.EditorTools
                 Check(sim.run.Score==350,"Live stop total");
                 sim.run.Target=50;sim.run.Served=49;sim.run.Distance=RunState.Stops[50];sim.run.Service();stage++;
             }else if(stage==5 && flow.WalkingCount>0){
-                Check(flow.VisibleCount>=14,"Terminal alighting");stage++;
+                Check(flow.VisibleCount==18,"Terminal alighting");stage++;
             }else if(stage==6 && sim.run.Dwell>=3){
                 sim.run.Service();stage++;
             }else if(stage==7 && sim.run.Complete){
@@ -144,7 +145,7 @@ namespace LineFour.Oido.EditorTools
             }else if(stage==8){
                 Check(sim.Opening && sim.run.Score==0 && sim.run.Target==0 && sim.consist.position.z==0,"Fresh opening");
                 ScreenCapture.CaptureScreenshot(Path.GetFullPath("Library/Line4_Opening.png"));
-                File.Delete(Verify);File.AppendAllText(Report,"PLAY_OK title, raised cab, passenger boarding and terminal alighting, live scoring, fresh opening at 0 points.\n");
+                File.Delete(Verify);File.AppendAllText(Report,"PLAY_OK title, seated cab, passenger boarding and terminal alighting, live scoring, fresh opening at 0 points.\n");
             }
         }
     }

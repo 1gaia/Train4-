@@ -6,9 +6,9 @@ namespace LineFour.Oido
     // Three cohorts retain the people who just alighted until the train leaves the platform.
     public sealed class PassengerFlow : MonoBehaviour
     {
-        const int Count=14;
+        const int Capacity = 22;
         sealed class Person { public Transform root,left,right; }
-        Person[,] people=new Person[3,Count];
+        Person[,] people=new Person[3,Capacity];
         float[] doors;
         Transform train;
         Material cloth;
@@ -22,7 +22,7 @@ namespace LineFour.Oido
             cloth=new Material(fabric);
             string[] colors={"356175","AB644D","55634A","C18B47","826583","374C78","9B505C"};
             Mesh leg=Part("Trousers",new[]{new Shape(0,-.33f,0,.145f,.69f,.185f,"343C49"),new Shape(0,-.665f,.046f,.156f,.12f,.25f,"242932")});
-            for(int c=0;c<3;c++)for(int j=0;j<Count;j++){
+            for(int c=0;c<3;c++)for(int j=0;j<Capacity;j++){
                 int k=(j+c*3)%colors.Length;
                 if(meshes.Count<=1+k){
                     string skin=new[]{"C88968","E2B699","AE795F"}[k%3],coat=colors[k];
@@ -67,33 +67,78 @@ namespace LineFour.Oido
             var g=new GameObject(mesh.name,typeof(MeshFilter),typeof(MeshRenderer));g.transform.SetParent(parent,false);g.transform.localPosition=pos;
             g.GetComponent<MeshFilter>().sharedMesh=mesh;g.GetComponent<MeshRenderer>().sharedMaterial=cloth;return g.transform;
         }
+
+        static int CrowdAt(int station) => 16 + (station * 5 + 2) % 7;
+
         public void Display(RunState r)
         {
-            VisibleCount=WalkingCount=0;if(doors==null||doors.Length<4)return;
-            for(int c=0;c<3;c++)for(int j=0;j<Count;j++){
-                Person p=people[c,j];int role=(c-r.Target%3+3)%3;
-                bool incoming=role==0, last=role==1;
-                float dz=doors[Mathf.RoundToInt(j*(doors.Length-1f)/(Count-1))];
-                float stop=RunState.Stops[r.Target], previous=RunState.Stops[Mathf.Max(0,r.Target-1)];
-                bool show=incoming?r.Target<RunState.Stops.Length-1 && Mathf.Abs(stop-r.Distance)<250:
-                    last?r.Target>=2 && r.Distance-previous<235:r.Served>=0;
-                if(p.root.gameObject.activeSelf!=show)p.root.gameObject.SetActive(show);
-                if(!show)continue;
-                VisibleCount++;
-                float q=r.Phase==DoorPhase.Boarding?Mathf.Clamp01((r.Dwell-(incoming?1.27f:0)-.055f*(j%4))/(incoming?1.43f:1.06f)):
-                    (r.Phase==DoorPhase.Closing||r.Complete?1:0);
-                Vector3 inside=new Vector3(-.64f,1.40f,train.position.z+dz+.6f);
-                Vector3 doorway=new Vector3(-1.51f,1.30f,train.position.z+dz);
-                Vector3 wait=new Vector3(-3.08f-.17f*(j%3),1.265f,stop+dz+.48f);
-                Vector3 outside=new Vector3(-3.85f,1.265f,stop+dz-1.15f);
-                Vector3 start=incoming?wait:inside,end=incoming?inside:outside;
-                bool moving=q>0&&q<1&&!last;float swing=moving?Mathf.Sin(q*Mathf.PI*6)*23:0;
-                if(moving)WalkingCount++;
-                Vector3 pos=last?new Vector3(-3.85f,1.265f,previous+dz-1.15f):
-                    q<.5f?Vector3.Lerp(start,doorway,q*2):Vector3.Lerp(doorway,end,(q-.5f)*2);
-                pos.y+=Mathf.Abs(swing)*.0008f;
-                p.root.SetPositionAndRotation(pos,Quaternion.Euler(0,last?-65:incoming?88:-92,0));
-                p.left.localRotation=Quaternion.Euler(swing,0,0);p.right.localRotation=Quaternion.Euler(-swing,0,0);
+            VisibleCount = WalkingCount = 0;
+            if (doors == null || doors.Length < 4) return;
+
+            float stop = RunState.Stops[r.Target];
+            float previous = RunState.Stops[Mathf.Max(0, r.Target - 1)];
+            bool nearStop = Mathf.Abs(stop - r.Distance) < 250;
+            bool doorsClosing = r.Phase == DoorPhase.Closing || r.Complete;
+
+            for (int cohort = 0; cohort < 3; cohort++)
+            {
+                int role = (cohort - r.Target % 3 + 3) % 3;
+                bool boarding = role == 0;
+                bool alreadyExited = role == 1;
+                int count;
+                if (boarding)
+                    count = nearStop && r.Target < RunState.Stops.Length - 1 ? CrowdAt(r.Target) : 0;
+                else if (alreadyExited)
+                    count = r.Target >= 2 && r.Distance - previous < 235 ? CrowdAt(r.Target - 2) : 0;
+                else
+                    count = r.Served >= 0 && r.Target > 0 ? CrowdAt(r.Target - 1) : 0;
+
+                for (int j = 0; j < Capacity; j++)
+                {
+                    Person person = people[cohort, j];
+                    bool visible = j < count;
+                    if (person.root.gameObject.activeSelf != visible) person.root.gameObject.SetActive(visible);
+                    if (!visible) continue;
+                    VisibleCount++;
+
+                    float doorZ = doors[Mathf.RoundToInt(j * (doors.Length - 1f) / (count - 1))];
+                    float offset = (j % 3 - 1) * .18f;
+                    float trainZ = train.position.z + doorZ;
+                    var inside = new Vector3(-.64f, 1.40f, trainZ + .6f);
+                    var doorway = new Vector3(-1.51f, 1.30f, trainZ);
+                    var wait = new Vector3(-3.08f - .17f * (j % 3), 1.265f, stop + doorZ + .48f + offset);
+                    var exit = new Vector3(-4.1f - .20f * (j % 4), 1.265f, (alreadyExited ? previous : stop) + doorZ - 1.15f + offset);
+
+                    // Let alighting passengers clear the doors before the waiting group boards.
+                    float delay = (boarding ? 1.4f : 0) + .045f * (j % 5);
+                    float duration = (boarding ? 1.22f : 1.04f) + .04f * (j % 4);
+                    float progress = alreadyExited || doorsClosing ? 1 :
+                        r.Phase == DoorPhase.Boarding ? Mathf.Clamp01((r.Dwell - delay) / duration) : 0;
+                    Vector3 start = boarding ? wait : inside;
+                    Vector3 end = boarding ? inside : exit;
+                    Vector3 position = progress < .5f ? Vector3.Lerp(start, doorway, progress * 2) :
+                        Vector3.Lerp(doorway, end, progress * 2 - 1);
+
+                    bool walking = progress > 0 && progress < 1;
+                    float swing = 0;
+                    float heading = boarding ? 90 : -90;
+                    if (walking)
+                    {
+                        WalkingCount++;
+                        swing = Mathf.Sin(progress * Mathf.PI * (boarding ? 6 : 8)) * 23;
+                        Vector3 direction = Vector3.Lerp(doorway - start, end - doorway, progress);
+                        heading = Mathf.Atan2(direction.x, direction.z) * Mathf.Rad2Deg;
+                    }
+                    else if (boarding && progress == 0)
+                    {
+                        heading += Mathf.Sin(Time.time * .8f + j * 1.7f) * 8;
+                    }
+
+                    position.y += Mathf.Abs(swing) * .0008f;
+                    person.root.SetPositionAndRotation(position, Quaternion.Euler(0, heading, 0));
+                    person.left.localRotation = Quaternion.Euler(swing, 0, 0);
+                    person.right.localRotation = Quaternion.Euler(-swing, 0, 0);
+                }
             }
         }
         void OnDestroy(){foreach(var mesh in meshes)Destroy(mesh);if(cloth)Destroy(cloth);}
