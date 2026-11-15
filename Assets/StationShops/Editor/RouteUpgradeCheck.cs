@@ -69,6 +69,37 @@ public static class RouteUpgradeCheck {
         Check(Quaternion.Angle(grade.AtTravel(0).Rotation,grade.AtTravel(grade.FirstLength).Rotation)>89.9f,"Smooth right-angle turn");
     }
 
+    public static void CheckMappedTrack(){
+        var path=CurveRoute.Path;
+        Check(path.HasMappedTrack,"Mapped continuation is missing");
+        var stops=RouteSchedule.Stops;
+        Check(Mathf.Abs(path.TravelAt(stops[50])-86100)<100,"Map-based end-to-end distance");
+        Check(Mathf.Abs(path.TravelAt(stops[2])-path.TravelAt(stops[1])-2767)<15,"Jeongwang to Singiloncheon");
+        Check(Mathf.Abs(path.TravelAt(stops[49])-path.TravelAt(stops[48])-7876)<20,"Byeollae Byeolgaram to Onam");
+        for(int i=1;i<stops.Length;i++){
+            float travel=path.TravelAt(stops[i]);
+            float before=path.TravelAt(stops[i]-.25f);
+            float after=path.TravelAt(stops[i]+.25f);
+            Check(Mathf.Abs(travel-before-.25f)<.03f && Mathf.Abs(after-travel-.25f)<.03f,
+                "Unit-scale stop position at "+RouteSchedule.Names[i]);
+            var frame=path.Frame(stops[i]);
+            Check(Vector3.Distance(frame.Position,path.AtTravel(travel).Position)<.025f,"Track meets the stop marker");
+            Check(Vector3.Distance(frame.Position,path.AtTravel(travel-205).Position-frame.Rotation*Vector3.back*205)<2,
+                "Usable platform approach at "+RouteSchedule.Names[i]);
+            for(int point=1;point<10;point++){
+                float source=Mathf.Lerp(stops[i-1],stops[i],point*.1f);
+                Check(Mathf.Abs(path.SourceAt(path.TravelAt(source))-source)<.025f,"Authored-distance round trip");
+            }
+        }
+        float straight=(stops[5]+stops[6])*.5f;
+        Check(!CurveRoute.TryCurveLimit(straight,out _,out _),"No imposed curve limit on Gojan–Jungang straight");
+        var late=new OidoRunState {Served=49,Target=50,Distance=stops[50]-12,Speed=.125f};
+        float initial=late.Remaining;
+        for(int frame=0;frame<120;frame++)
+            late.Step(1f/240,false,false,false);
+        Check(initial-late.Remaining>.04f,"Low-speed movement at long chainage");
+    }
+
     static void Tick(){
         int stage=SessionState.GetInt("RouteCheck",0);
         if(stage==0||!EditorApplication.isPlaying||Time.frameCount<Math.Max(25,frame))return;
@@ -78,17 +109,12 @@ public static class RouteUpgradeCheck {
             if(stage==1){
                 Check(sim.GetComponent<CurveRoute>() && weather && sim.GetComponent<RouteAudio>(),"Runtime components");
                 CheckTrackGeometry();
+                CheckMappedTrack();
                 foreach(var s in RouteSchedule.Stops){
                     var across=CurveRoute.Map(new Vector3(5.3f,0,s))-CurveRoute.Map(new Vector3(0,0,s));
                     Check(Vector3.Distance(across,CurveRoute.Heading(s)*Vector3.right*5.3f)<.01f,"Station alignment");
                 }
                 Check(Quaternion.Angle(CurveRoute.Heading(0),CurveRoute.Heading(RouteSchedule.Stops[1]))>60,"Oido to Jeongwang turning angle");
-                for(int i=1;i<50;i++){
-                    float a=RouteSchedule.Stops[i]+100,b=RouteSchedule.Stops[i+1]-260;
-                    var middle=CurveRoute.Map(Vector3.forward*((a+b)*.5f));
-                    var chord=(CurveRoute.Map(Vector3.forward*a)+CurveRoute.Map(Vector3.forward*b))*.5f;
-                    Check(Vector3.Distance(middle,chord)>5,"Missing curve "+i);
-                }
                 var speedCheck=new OidoRunState{Served=0,Target=1,Distance=0,Speed=OidoRunState.MaxSpeed};
                 var track=CurveRoute.Path;
                 float restrictedEnd=track.FirstCurveEnd+205.2f;
@@ -124,7 +150,7 @@ public static class RouteUpgradeCheck {
             }else{
                 Check(sim.GetComponent<RouteAudio>().SpokenStations>=1,"Station announcements");
                 Shot(sim.cabCamera,"CurvedCab");
-                File.AppendAllText("Library/RouteUpgradeCheck.txt","PASS 50 curved intervals; 51 straight platforms; articulated train; loaded and playing audio; 65/20/15 weather; day 150s, sunset 295s, night/rain 450s.");
+                File.AppendAllText("Library/RouteUpgradeCheck.txt","PASS 50 mapped intervals; 51 platform approaches; articulated train; loaded and playing audio; 65/20/15 weather; day 150s, sunset 295s, night/rain 450s.");
                 SessionState.SetInt("RouteCheck",0);EditorApplication.Exit(0);return;
             }
             SessionState.SetInt("RouteCheck",stage+1);

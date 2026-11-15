@@ -12,6 +12,9 @@ namespace LineFour.Oido
         public bool CurveBraking { get; private set; }
         internal bool[] ScreenDoorStops;
         float stopError;
+        double travel;
+        float lastDistance;
+        TrackPath runningPath;
         public int Score, Misses, LastAccuracy;
         public float LastError;
         public string Receipt="첫 승하차 대기";
@@ -54,8 +57,12 @@ namespace LineFour.Oido
                 power ? Mathf.Lerp(1.02f, 0.48f, Speed / MaxSpeed) : -0.09f;
             Speed = Mathf.Clamp(Speed + acceleration * dt, 0, MaxSpeed);
             var path = CurveRoute.Path;
-            float travel = path.TravelAt(Distance);
-            float predictedTravel = travel + (previous + Speed) * .5f * dt;
+            if (path != runningPath || Distance != lastDistance)
+            {
+                runningPath = path;
+                travel = path.TravelAt(Distance);
+            }
+            float predictedTravel = (float)(travel + (previous + Speed) * .5f * dt);
             if (CurveRoute.TryCurveLimitAtTravel(predictedTravel, out float toCurve, out int limitKmh))
             {
                 const float approachDeceleration = .8f;
@@ -64,7 +71,8 @@ namespace LineFour.Oido
                 CurveBraking = Speed > allowed;
                 Speed = Mathf.Min(Speed, allowed);
             }
-            Distance = path.SourceAt(travel + (previous + Speed) * .5f * dt);
+            travel += (previous + Speed) * .5f * dt;
+            Distance = lastDistance = path.SourceAt((float)travel);
             if (Remaining < -Tolerance) {
                 Score-=100;Misses++;Missed=true;Speed=0;Receipt=Names[Target]+"  무정차 통과 −100";
             }
@@ -88,6 +96,7 @@ namespace LineFour.Oido
             if (Complete) { Served=-1; Score=Misses=LastAccuracy=0;LastError=0;Receipt="첫 승하차 대기"; }
             Target=Served+1; Distance=Stops[Mathf.Max(0,Served)]; Speed=0;
             if(Missed) Distance=Stops[Target]-24;
+            runningPath=null;
             Missed=false;
             DoorTravel=0; Dwell=0; Phase=DoorPhase.Closed; Complete=false;
         }

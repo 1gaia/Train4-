@@ -1,5 +1,6 @@
 using UnityEditor;
 using UnityEngine;
+using System.Linq;
 
 namespace LineFour.Oido.EditorTools
 {
@@ -10,6 +11,9 @@ namespace LineFour.Oido.EditorTools
         Vector3[] sleeperLines;
         bool editInScene;
         int selectedKnot = -1;
+        int section;
+        static readonly string[] Sections = RouteSchedule.Names.Take(RouteSchedule.Names.Length - 1)
+            .Select((name, i) => name + " → " + RouteSchedule.Names[i + 1]).ToArray();
 
         void OnEnable()
         {
@@ -33,13 +37,22 @@ namespace LineFour.Oido.EditorTools
                     editInScene = !editInScene;
                     Refresh();
                 }
-                if (editInScene && GUILayout.Button("Frame Oido–Jeongwang"))
+                if (!editInScene) return;
+                int selected = EditorGUILayout.Popup("Section", section, Sections);
+                if (selected != section)
+                {
+                    section = selected;
+                    Refresh();
+                }
+                if (GUILayout.Button("Frame selected section"))
                 {
                     var path = ((TrackAlignment)target).Build();
-                    var bounds = new Bounds(Vector3.zero, Vector3.one);
-                    for (float s = 0; s < path.FirstLength; s += 10)
-                        bounds.Encapsulate(path.ApproachFrame(s).Position);
-                    bounds.Encapsulate(path.ApproachFrame(path.FirstLength).Position);
+                    float from = path.TravelAt(RouteSchedule.Stops[section]);
+                    float to = path.TravelAt(RouteSchedule.Stops[section + 1]);
+                    var bounds = new Bounds(path.AtTravel(from).Position, Vector3.one);
+                    for (float s = from + 10; s < to; s += 10)
+                        bounds.Encapsulate(path.AtTravel(s).Position);
+                    bounds.Encapsulate(path.AtTravel(to).Position);
                     var view = SceneView.lastActiveSceneView;
                     if (view) view.LookAt(bounds.center, Quaternion.Euler(90, 0, 0),
                         Mathf.Max(bounds.size.x, bounds.size.z) * .69f, true);
@@ -66,6 +79,7 @@ namespace LineFour.Oido.EditorTools
             Handles.DrawLines(railLines);
             Handles.color = new Color(.8f, .58f, .32f);
             Handles.DrawLines(sleeperLines);
+            if (section != 0) return;
             Vector3 start = knots.GetArrayElementAtIndex(0).vector3Value;
             Handles.color = Color.white;
             for (int i = 1; i < knots.arraySize; i++)
@@ -87,14 +101,15 @@ namespace LineFour.Oido.EditorTools
 
         void BuildPreview(TrackPath path)
         {
-            float end = path.TravelAt(RouteSchedule.Stops[1]);
-            int steps = Mathf.CeilToInt(end / 2);
+            float start = path.TravelAt(RouteSchedule.Stops[section]);
+            float end = path.TravelAt(RouteSchedule.Stops[section + 1]);
+            int steps = Mathf.CeilToInt((end - start) / 2);
             railLines = new Vector3[steps * 8];
             int line = 0;
-            TrackFrame previous = path.AtTravel(0);
+            TrackFrame previous = path.AtTravel(start);
             for (int i = 1; i <= steps; i++)
             {
-                TrackFrame next = path.AtTravel(end * i / steps);
+                TrackFrame next = path.AtTravel(Mathf.Lerp(start, end, (float)i / steps));
                 for (int track = 0; track < 2; track++)
                 for (int side = -1; side <= 1; side += 2)
                 {
@@ -104,8 +119,8 @@ namespace LineFour.Oido.EditorTools
                 }
                 previous = next;
             }
-            TrackMesh.SleeperRange(path, 0, end, false, out int first, out int last);
-            TrackMesh.SleeperRange(path, 0, end, true, out int secondFirst, out int secondLast);
+            TrackMesh.SleeperRange(path, start, end, false, out int first, out int last);
+            TrackMesh.SleeperRange(path, start, end, true, out int secondFirst, out int secondLast);
             sleeperLines = new Vector3[(last - first + secondLast - secondFirst) * 2];
             line = 0;
             for (int track = 0; track < 2; track++)

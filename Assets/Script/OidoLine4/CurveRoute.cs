@@ -44,26 +44,30 @@ namespace LineFour.Oido
         internal static bool TryCurveLimitAtTravel(float travel, out float remaining, out int limitKmh)
         {
             TrackPath path = Path;
-            int first = Mathf.Max(0, TrackPath.Section(path.SourceAt(travel - TrainLength)));
+            float toFirstCurve = path.FirstCurveStart - travel;
+            if (path.FirstCurveEnd > path.FirstCurveStart && travel <= path.FirstCurveEnd + TrainLength && toFirstCurve <= WarningDistance)
+            {
+                remaining = toFirstCurve;
+                limitKmh = 40;
+                return true;
+            }
+            if (path.HasMappedTrack)
+            {
+                bool hasCurve = path.TryMappedCurve(travel, WarningDistance, TrainLength, out remaining);
+                limitKmh = hasCurve ? 45 : 0;
+                return hasCurve;
+            }
+
+            int first = Mathf.Max(1, TrackPath.Section(path.SourceAt(travel - TrainLength)));
             int last = Mathf.Min(RouteSchedule.Stops.Length - 2, TrackPath.Section(path.SourceAt(travel + WarningDistance)));
             for (int section = first; section <= last; section++)
             {
-                float start, end;
-                if (section == 0)
-                {
-                    start = path.FirstCurveStart;
-                    end = path.FirstCurveEnd;
-                    if (end <= start) continue;
-                }
-                else
-                {
-                    TrackPath.LaterCurveBounds(section, out start, out end);
-                    start = path.TravelAt(start);
-                    end = path.TravelAt(end);
-                }
+                TrackPath.LaterCurveBounds(section, out float start, out float end);
+                start = path.TravelAt(start);
+                end = path.TravelAt(end);
                 if (travel > end + TrainLength || start - travel > WarningDistance) continue;
                 remaining = start - travel;
-                limitKmh = section == 0 ? 40 : 45;
+                limitKmh = 45;
                 return true;
             }
             remaining = 0;
@@ -111,7 +115,7 @@ namespace LineFour.Oido
                     }
                     WarpMesh(filter);
                 }
-                // Beyond Jeongwang the old scenery uses one common local frame.
+                // Preserve the authored local transforms used by screen doors and station assets.
                 var t = root.transform;
                 t.SetPositionAndRotation(outbound.Position + outbound.Rotation * t.position, outbound.Rotation * t.rotation);
             }
@@ -130,9 +134,18 @@ namespace LineFour.Oido
         {
             var source = filter.sharedMesh;
             if (!source || !source.isReadable) return;
-            var points = source.vertices;
+            if (filter.TryGetComponent<MeshRenderer>(out var renderer) && !renderer.enabled) return;
             var localToWorld = filter.transform.localToWorldMatrix;
             var worldToLocal = filter.transform.worldToLocalMatrix;
+            if (Path.HasMappedTrack && (filter.name.StartsWith("Tunnel ", StringComparison.Ordinal) ||
+                filter.name == "TunnelShared" || filter.name == "Open railway"))
+            {
+                Mesh corridor = SceneryWarp.Corridor(Path, source, localToWorld, worldToLocal);
+                filter.sharedMesh = corridor;
+                generated.Add(corridor);
+                return;
+            }
+            var points = source.vertices;
             bool changed = false;
             for (int i = 0; i < points.Length; i++)
             {

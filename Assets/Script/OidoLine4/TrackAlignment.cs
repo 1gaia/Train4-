@@ -12,12 +12,13 @@ namespace LineFour.Oido
             new Vector3(-620, 0, 832), new Vector3(-839, 0, 835)
         };
         [SerializeField, Min(.3f)] float sleeperSpacing = .6f;
+        [SerializeField] TextAsset mappedTrack;
         [SerializeField] Material foundation;
         [SerializeField] Material ballast;
         [SerializeField] Material rail;
         [SerializeField] Material sleeper;
 
-        public TrackPath Build() => new TrackPath(knots, Mathf.Max(.3f, sleeperSpacing));
+        public TrackPath Build() => new TrackPath(knots, Mathf.Max(.3f, sleeperSpacing), mappedTrack);
         internal Material[] Materials => new[] { foundation, ballast, rail, sleeper };
     }
 
@@ -50,12 +51,14 @@ namespace LineFour.Oido
         readonly float[] parallelDistances;
         readonly TrackFrame arrival;
         readonly Quaternion inverseArrival;
+        readonly MappedTrack mapped;
+        public bool HasMappedTrack => mapped != null;
         public float FirstLength => approachDistance[approachDistance.Length - 1];
         public float FirstCurveStart { get; }
         public float FirstCurveEnd { get; }
         public float SleeperSpacing { get; }
 
-        public TrackPath(Vector3[] points, float sleeperSpacing = .6f)
+        public TrackPath(Vector3[] points, float sleeperSpacing = .6f, TextAsset mappedTrack = null)
         {
             SleeperSpacing = Mathf.Max(.3f, sleeperSpacing);
             var knots = new List<Vector3> { Vector3.zero };
@@ -69,19 +72,26 @@ namespace LineFour.Oido
             }
             if (knots.Count == 1) knots.Add(Vector3.forward * RouteSchedule.Stops[1]);
 
-            SampleApproach(knots, out approachDistance, out approachFrames);
-            approachParallelDistance = new float[approachFrames.Length];
-            double parallelLength = 0;
-            for (int i = 1; i < approachFrames.Length; i++)
-            {
-                parallelLength += Vector3.Distance(approachFrames[i - 1].Point(ParallelOffset, 0),
-                    approachFrames[i].Point(ParallelOffset, 0));
-                approachParallelDistance[i] = (float)parallelLength;
-            }
+            Vector3 direction = knots[knots.Count - 1] - knots[knots.Count - 2];
+            bool level = Mathf.Abs(direction.y) < .001f;
+            direction.y = 0;
+            SampleSpline(knots, Vector3.forward, direction.sqrMagnitude > .01f ? direction.normalized : Vector3.forward, level,
+                out approachDistance, out approachFrames);
+            approachParallelDistance = ParallelDistances(approachFrames);
+            double parallelLength = approachParallelDistance[approachParallelDistance.Length - 1];
             arrival = approachFrames[approachFrames.Length - 1];
             inverseArrival = Quaternion.Inverse(arrival.Rotation);
             FirstCurveStart = FindTurn(false);
             FirstCurveEnd = FindTurn(true);
+            try
+            {
+                mapped = MappedTrack.Read(mappedTrack, arrival, FirstLength, (float)parallelLength);
+            }
+            catch (FormatException error)
+            {
+                Debug.LogWarning(error.Message);
+            }
+            if (mapped != null) return;
 
             float firstStop = RouteSchedule.Stops[1];
             int samples = Mathf.RoundToInt((SourceEnd - firstStop) / SampleStep) + 1;
@@ -102,20 +112,30 @@ namespace LineFour.Oido
             }
         }
 
-        static void SampleApproach(List<Vector3> points, out float[] distances, out TrackFrame[] frames)
+        internal static float[] ParallelDistances(TrackFrame[] frames)
+        {
+            var result = new float[frames.Length];
+            double distance = 0;
+            for (int i = 1; i < frames.Length; i++)
+            {
+                distance += Vector3.Distance(frames[i - 1].Point(ParallelOffset, 0), frames[i].Point(ParallelOffset, 0));
+                result[i] = (float)distance;
+            }
+            return result;
+        }
+
+        internal static void SampleSpline(IReadOnlyList<Vector3> points, Vector3 initialDirection, Vector3 finalDirection,
+            bool straightArrival, out float[] distances, out TrackFrame[] frames)
         {
             var directions = new Vector3[points.Count];
-            directions[0] = Vector3.forward;
+            directions[0] = initialDirection;
             for (int i = 1; i < points.Count - 1; i++)
                 directions[i] = ((points[i] - points[i - 1]).normalized + (points[i + 1] - points[i]).normalized).normalized;
-            Vector3 exit = points[points.Count - 1] - points[points.Count - 2];
-            bool levelApproach = Mathf.Abs(exit.y) < .001f;
-            exit.y = 0;
-            directions[points.Count - 1] = exit.sqrMagnitude > .01f ? exit.normalized : Vector3.forward;
-            if (levelApproach && points.Count > 2) directions[points.Count - 2] = directions[points.Count - 1];
+            directions[points.Count - 1] = finalDirection;
+            if (straightArrival && points.Count > 2) directions[points.Count - 2] = finalDirection;
 
             var length = new List<float> { 0 };
-            var samples = new List<TrackFrame> { new TrackFrame(Vector3.zero, Quaternion.identity) };
+            var samples = new List<TrackFrame> { new TrackFrame(points[0], Quaternion.LookRotation(initialDirection)) };
             double accumulated = 0;
             for (int i = 0; i < points.Count - 1; i++)
             {
@@ -129,8 +149,8 @@ namespace LineFour.Oido
                 for (int step = 1; step <= steps; step++)
                 {
                     float t = (float)step / steps;
-                    Vector3 point = ((a * t + b) * t + c) * t + start;
-                    Vector3 tangent = (3 * a * t + 2 * b) * t + c;
+                    Vector3 point = step == steps ? end : ((a * t + b) * t + c) * t + start;
+                    Vector3 tangent = step == steps ? directions[i + 1] : (3 * a * t + 2 * b) * t + c;
                     accumulated += Vector3.Distance(samples[samples.Count - 1].Position, point);
                     samples.Add(new TrackFrame(point, Quaternion.LookRotation(tangent)));
                     length.Add((float)accumulated);
@@ -155,15 +175,17 @@ namespace LineFour.Oido
             return 0;
         }
 
-        public TrackFrame ApproachFrame(float distance)
+        public TrackFrame ApproachFrame(float distance) => InterpolateFrame(distance, approachDistance, approachFrames);
+
+        internal static TrackFrame InterpolateFrame(float distance, float[] distances, TrackFrame[] frames)
         {
-            int upper = Array.BinarySearch(approachDistance, distance);
-            if (upper >= 0) return approachFrames[upper];
-            upper = Mathf.Clamp(~upper, 1, approachFrames.Length - 1);
+            int upper = Array.BinarySearch(distances, distance);
+            if (upper >= 0) return frames[upper];
+            upper = Mathf.Clamp(~upper, 1, frames.Length - 1);
             int lower = upper - 1;
-            float t = Mathf.InverseLerp(approachDistance[lower], approachDistance[upper], distance);
-            return new TrackFrame(Vector3.Lerp(approachFrames[lower].Position, approachFrames[upper].Position, t),
-                Quaternion.Slerp(approachFrames[lower].Rotation, approachFrames[upper].Rotation, t));
+            float t = Mathf.InverseLerp(distances[lower], distances[upper], distance);
+            return new TrackFrame(Vector3.Lerp(frames[lower].Position, frames[upper].Position, t),
+                Quaternion.Slerp(frames[lower].Rotation, frames[upper].Rotation, t));
         }
 
         public TrackFrame Frame(float source)
@@ -171,6 +193,7 @@ namespace LineFour.Oido
             if (source <= 0) return new TrackFrame(Vector3.forward * source, Quaternion.identity);
             float firstStop = RouteSchedule.Stops[1];
             if (source < firstStop) return ApproachFrame(FirstTravel(source));
+            if (mapped != null) return mapped.Frame(source);
             TrackFrame outbound = OutboundFrame(source);
             return new TrackFrame(arrival.Position + arrival.Rotation * (outbound.Position - Vector3.forward * firstStop),
                 arrival.Rotation * outbound.Rotation);
@@ -199,7 +222,7 @@ namespace LineFour.Oido
 
         internal Vector3 SceneryPoint(Vector3 original)
         {
-            if (original.z >= RouteSchedule.Stops[1]) return OutboundFrame(original.z).Point(original.x, original.y);
+            if (mapped == null && original.z >= RouteSchedule.Stops[1]) return OutboundFrame(original.z).Point(original.x, original.y);
             return inverseArrival * (Frame(original.z).Point(original.x, original.y) - OutboundTransform.Position);
         }
 
@@ -241,7 +264,7 @@ namespace LineFour.Oido
             return (low + high) * .5f;
         }
 
-        static float InterpolateDistance(float distance, float[] from, float[] to)
+        internal static float InterpolateDistance(float distance, float[] from, float[] to)
         {
             int upper = Array.BinarySearch(from, distance);
             if (upper >= 0) return to[upper];
@@ -258,6 +281,7 @@ namespace LineFour.Oido
                 float travel = FirstTravel(source);
                 return parallel ? InterpolateDistance(travel, approachDistance, approachParallelDistance) : travel;
             }
+            if (mapped != null) return mapped.TravelAt(source, parallel);
             float[] distances = parallel ? parallelDistances : mainDistances;
             if (source >= SourceEnd) return distances[distances.Length - 1] + source - SourceEnd;
             float index = (source - firstStop) / SampleStep;
@@ -268,9 +292,11 @@ namespace LineFour.Oido
         public float SourceAt(float travel, bool parallel = false)
         {
             if (travel <= 0) return travel;
-            float[] distances = parallel ? parallelDistances : mainDistances;
-            if (travel < distances[0]) return FirstSource(parallel
+            float firstLength = parallel ? approachParallelDistance[approachParallelDistance.Length - 1] : FirstLength;
+            if (travel < firstLength) return FirstSource(parallel
                 ? InterpolateDistance(travel, approachParallelDistance, approachDistance) : travel);
+            if (mapped != null) return mapped.SourceAt(travel, parallel);
+            float[] distances = parallel ? parallelDistances : mainDistances;
             if (travel >= distances[distances.Length - 1]) return SourceEnd + travel - distances[distances.Length - 1];
             int upper = Array.BinarySearch(distances, travel);
             float firstStop = RouteSchedule.Stops[1];
@@ -285,9 +311,17 @@ namespace LineFour.Oido
             TrackFrame frame;
             if (travel > 0 && travel < (parallel ? approachParallelDistance[approachParallelDistance.Length - 1] : FirstLength))
                 frame = ApproachFrame(parallel ? InterpolateDistance(travel, approachParallelDistance, approachDistance) : travel);
+            else if (mapped != null && travel >= (parallel ? approachParallelDistance[approachParallelDistance.Length - 1] : FirstLength))
+                frame = mapped.AtTravel(travel, parallel);
             else
                 frame = Frame(SourceAt(travel, parallel));
             return parallel ? new TrackFrame(frame.Point(ParallelOffset, 0), frame.Rotation) : frame;
+        }
+
+        internal bool TryMappedCurve(float travel, float warningDistance, float trainLength, out float remaining)
+        {
+            remaining = 0;
+            return mapped != null && mapped.TryCurve(travel, warningDistance, trainLength, out remaining);
         }
     }
 }

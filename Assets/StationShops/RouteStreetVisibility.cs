@@ -23,15 +23,18 @@ namespace LineFour.Streets
         {
             if(!drivingCamera || districts==null)return;
             float z=drive?drive.run.Distance:drivingCamera.transform.position.z;
-            if(Mathf.Abs(lastZ-z)<30)return;
-            lastZ=z;
+            var path=drive?CurveRoute.Path:null;
+            float distance=path!=null?path.TravelAt(z):z;
+            if(Mathf.Abs(lastZ-distance)<30)return;
+            lastZ=distance;
             float range=drivingCamera.farClipPlane+140;
             var stops=RouteSchedule.Stops;
             for(int i=0;i<districts.Length;i++){
                 if(!districts[i])continue;
                 float a=i==0?stops[i]-260:(stops[i-1]+stops[i])*.5f;
                 float b=i+1==stops.Length?stops[i]+150:(stops[i]+stops[i+1])*.5f;
-                bool visible=z+range>=a && z-range<=b;
+                if(path!=null){a=path.TravelAt(a);b=path.TravelAt(b);}
+                bool visible=distance+range>=a && distance-range<=b;
                 if(districts[i].gameObject.activeSelf!=visible)districts[i].gameObject.SetActive(visible);
             }
         }

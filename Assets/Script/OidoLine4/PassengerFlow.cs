@@ -72,6 +72,7 @@ namespace LineFour.Oido
             float previous = RunState.Stops[Mathf.Max(0, r.Target - 1)];
             var path = CurveRoute.Path;
             float trainTravel = path.TravelAt(train.position.z);
+            float lastStopTravel = path.TravelAt(previous);
             bool nearStop = Mathf.Abs(r.Remaining) < 250;
             bool doorsClosing = r.Phase == DoorPhase.Closing || r.Complete;
 
@@ -84,7 +85,7 @@ namespace LineFour.Oido
                 if (boarding)
                     count = nearStop && r.Target < RunState.Stops.Length - 1 ? CrowdAt(r.Target) : 0;
                 else if (alreadyExited)
-                    count = r.Target >= 2 && r.Distance - previous < 235 ? CrowdAt(r.Target - 2) : 0;
+                    count = r.Target >= 2 && trainTravel - lastStopTravel < 235 ? CrowdAt(r.Target - 2) : 0;
                 else
                     count = r.Served >= 0 && r.Target > 0 ? CrowdAt(r.Target - 1) : 0;
 
