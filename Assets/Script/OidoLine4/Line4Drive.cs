@@ -8,6 +8,8 @@ namespace LineFour.Oido
         public static readonly float[] Stops = RouteSchedule.Stops;
         public static readonly string[] Names = RouteSchedule.Names;
         public const float Tolerance=4;
+        public const float MaxSpeed = 18;
+        public bool CurveBraking { get; private set; }
         internal bool[] ScreenDoorStops;
         float stopError;
         public int Score, Misses, LastAccuracy;
@@ -19,11 +21,13 @@ namespace LineFour.Oido
         public DoorPhase Phase;
         public bool Doors => Phase!=DoorPhase.Closed;
         public bool Complete;
-        public bool InZone => Mathf.Abs(Stops[Target] - Distance) <= Tolerance;
+        public float Remaining => CurveRoute.Path.TravelAt(Stops[Target]) - CurveRoute.Path.TravelAt(Distance);
+        public bool InZone => Mathf.Abs(Remaining) <= Tolerance;
         public bool Stopped => Speed < 0.01f;
 
         public void Step(float dt, bool power, bool brake, bool emergency)
         {
+            CurveBraking = false;
             if (Complete || Missed) return;
             if (Phase==DoorPhase.Opening) {
                 DoorTravel=Mathf.Min(1,DoorTravel+dt/1.6f);
@@ -47,10 +51,21 @@ namespace LineFour.Oido
             if (Served<0 || (Stopped && InZone)) {Speed=0;return;}
             float previous = Speed;
             float acceleration = emergency ? -2.15f : brake ? -1.23f :
-                power ? Mathf.Lerp(1.02f, 0.48f, Speed / 18) : -0.09f;
-            Speed = Mathf.Clamp(Speed + acceleration * dt, 0, 18);
-            Distance += (previous + Speed) * 0.5f * dt;
-            if (Distance > Stops[Target]+Tolerance) {
+                power ? Mathf.Lerp(1.02f, 0.48f, Speed / MaxSpeed) : -0.09f;
+            Speed = Mathf.Clamp(Speed + acceleration * dt, 0, MaxSpeed);
+            var path = CurveRoute.Path;
+            float travel = path.TravelAt(Distance);
+            float predictedTravel = travel + (previous + Speed) * .5f * dt;
+            if (CurveRoute.TryCurveLimitAtTravel(predictedTravel, out float toCurve, out int limitKmh))
+            {
+                const float approachDeceleration = .8f;
+                float limit = limitKmh / 3.6f;
+                float allowed = Mathf.Sqrt(limit * limit + 2 * approachDeceleration * Mathf.Max(0, toCurve));
+                CurveBraking = Speed > allowed;
+                Speed = Mathf.Min(Speed, allowed);
+            }
+            Distance = path.SourceAt(travel + (previous + Speed) * .5f * dt);
+            if (Remaining < -Tolerance) {
                 Score-=100;Misses++;Missed=true;Speed=0;Receipt=Names[Target]+"  무정차 통과 −100";
             }
         }
@@ -59,7 +74,7 @@ namespace LineFour.Oido
         {
             if (Complete || Missed || !Stopped || !InZone) return;
             if (Phase==DoorPhase.Closed) {
-                stopError = Distance - Stops[Target];
+                stopError = -Remaining;
                 if (ScreenDoorStops != null && Target < ScreenDoorStops.Length && ScreenDoorStops[Target])
                     Distance = Stops[Target];
                 Phase=DoorPhase.Opening; Dwell=0; Speed=0;
@@ -91,13 +106,14 @@ namespace LineFour.Oido
         public Shader passengerFabric;
         [SerializeField] PlatformScreenDoors[] screenDoors = System.Array.Empty<PlatformScreenDoors>();
         PlatformScreenDoors movingScreenDoors;
+        Vector3 screenDoorDirection;
         PassengerFlow passengers;
+        CurveRoute curve;
         public bool Opening { get; private set; }=true;
         float titleTime;
         public readonly RunState run = new RunState();
         public int View { get; private set; }
         private Vector3 origin;
-        LODGroup[] carLods;
         private Font font;
         private GUIStyle style;
         private AudioSource rolling, chime;
@@ -110,7 +126,6 @@ namespace LineFour.Oido
         void Start()
         {
             origin = consist.position;
-            carLods=consist.GetComponentsInChildren<LODGroup>();
             run.ScreenDoorStops = new bool[screenDoors.Length];
             for (int i = 0; i < screenDoors.Length; i++)
                 run.ScreenDoorStops[i] = screenDoors[i] != null;
@@ -120,7 +135,8 @@ namespace LineFour.Oido
             chime.clip = MakeSound(true); chime.volume=.3f;
             passengers=gameObject.AddComponent<PassengerFlow>();
             passengers.Prepare(passengerDoors,consist,passengerFabric);
-            gameObject.AddComponent<CurveRoute>();
+            curve = gameObject.AddComponent<CurveRoute>();
+            curve.Prepare(this);
             gameObject.AddComponent<RouteAtmosphere>();
             gameObject.AddComponent<RouteAudio>();
             UpdateCamera();
@@ -136,6 +152,8 @@ namespace LineFour.Oido
         {
             if(!run.Complete)return;
             run.RestartSection();consist.position=origin;Opening=true;View=0;yaw=pitch=titleTime=0;
+            curve.PlaceTrain(origin);
+            curve.ShowTrack(origin.z, cabCamera.farClipPlane);
             ReleaseMouse();passengers.Display(run);
         }
 
@@ -195,13 +213,18 @@ namespace LineFour.Oido
             if(weight!=lastDoorWeight) {
                 for(int i=0;i<doorCars.Length;i++) doorCars[i].SetBlendShapeWeight(platformShapes[i],weight);
                 // Closing the last few millimeters can advance the target to the next station.
-                if (weight > 0)
+                if (weight > 0 && lastDoorWeight <= 0)
+                {
                     movingScreenDoors = run.Target < screenDoors.Length ? screenDoors[run.Target] : null;
-                if (movingScreenDoors) movingScreenDoors.SetOpening(weight / 100f);
+                    screenDoorDirection = CurveRoute.Heading(RunState.Stops[run.Target]) * Vector3.forward;
+                }
+                if (movingScreenDoors) movingScreenDoors.SetOpening(weight / 100f, screenDoorDirection);
                 if (weight == 0) movingScreenDoors = null;
                 lastDoorWeight=weight;
             }
             consist.position=origin+Vector3.forward*run.Distance;
+            curve.PlaceTrain(consist.position);
+            curve.ShowTrack(consist.position.z, cabCamera.farClipPlane);
             passengers.Display(run);
             rolling.volume=0;
             UpdateCamera();
@@ -222,20 +245,21 @@ namespace LineFour.Oido
         void UpdateCamera()
         {
             Vector3 nose=consist.position;
-            if(carLods!=null)foreach(var group in carLods){
-                float center=group.transform.position.z-nose.z;
-                group.ForceLOD(View==2 && Mathf.Abs(center-saloonEye.z)<26?0:-1);
-            }
-            Vector3 eye, aim;
-            if (View==1) { eye=new Vector3(.36f,CabEyeHeight,cabEyeZ-.16f); aim=eye+new Vector3(0,-.13f,1)*25; }
-            else if (View==2) { eye=saloonEye; aim=eye+new Vector3(0,-.02f,-1)*12; }
-            else {
-                aim=new Vector3(0,1.9f,-18);
-                eye=aim+Quaternion.Euler(-Mathf.Clamp(39+pitch,10,79),20+yaw,0)*Vector3.forward*orbitDistance;
-                cabCamera.transform.SetPositionAndRotation(CurveRoute.Map(nose+eye),Quaternion.LookRotation(CurveRoute.Map(nose+aim)-CurveRoute.Map(nose+eye)));
+            if (View == 0)
+            {
+                curve.ResetLods();
+                TrackFrame frame = CurveRoute.AtOffset(nose.z, -18);
+                Vector3 aim = frame.Point(nose.x, nose.y + 1.9f);
+                Vector3 orbit = Quaternion.Euler(-Mathf.Clamp(39 + pitch, 10, 79), 20 + yaw, 0) * Vector3.forward * orbitDistance;
+                orbit = frame.Rotation * orbit;
+                cabCamera.transform.SetPositionAndRotation(aim + orbit, Quaternion.LookRotation(-orbit));
                 return;
             }
-            cabCamera.transform.SetPositionAndRotation(CurveRoute.Map(nose+eye),Quaternion.LookRotation(CurveRoute.Map(nose+aim)-CurveRoute.Map(nose+eye))*Quaternion.Euler(pitch,yaw,0));
+            bool saloon = View == 2;
+            Vector3 eye = saloon ? saloonEye : new Vector3(.36f, CabEyeHeight, cabEyeZ - .16f);
+            Vector3 facing = saloon ? new Vector3(0, -.02f, -1) : new Vector3(0, -.13f, 1);
+            Vector3 position = curve.CameraOnTrain(nose, eye, saloon, out Quaternion heading);
+            cabCamera.transform.SetPositionAndRotation(position, heading * Quaternion.LookRotation(facing) * Quaternion.Euler(pitch, yaw, 0));
         }
         public void TurnView(float horizontal,float vertical)
         {
@@ -284,7 +308,7 @@ namespace LineFour.Oido
             float s=Mathf.Min(Screen.width/1200f,Screen.height/680f), w=Screen.width/s, h=Screen.height/s;
             Matrix4x4 saved=GUI.matrix; GUI.matrix=Matrix4x4.Scale(new Vector3(s,s,1));
             if(Opening){Title(h);GUI.matrix=saved;return;}
-            float remaining=RunState.Stops[run.Target]-run.Distance;
+            float remaining=run.Remaining;
             RectColor(24,22,262,64,Ink); RectColor(24,22,5,64,Blue);
             Label(43,24,220,22,"SEOUL METRO   /   LINE 04",13,Blue,true);
             Label(43,44,235,34,"오이도 → 진접",22,Color.white,true);
@@ -302,6 +326,14 @@ namespace LineFour.Oido
                 RectColor(x-1,117,2,16,Color.white);
                 RectColor(x-Mathf.Clamp(remaining,-12,12)*8.7f-2,116,4,19,Color.yellow);
             }
+            if (!run.Complete && !run.Missed && CurveRoute.TryCurveLimit(run.Distance, out float toCurve, out int curveLimit))
+            {
+                RectColor(24,166,292,58,Ink);
+                Label(42,168,255,25,"곡선 구간   제한 " + curveLimit + " km/h",17,Color.yellow,true);
+                string warning = toCurve <= 0 ? "곡선 통과 중 · 편성 통과까지 제한" :
+                    "전방 " + Mathf.CeilToInt(toCurve) + " m · 서행 준비";
+                Label(42,193,255,25,warning,14,Pale);
+            }
             string action = run.Complete?"운행 완료   ·   R  다시 운전":
                 run.Phase==DoorPhase.Opening?"승강장 쪽 문 열리는 중":
                 run.Phase==DoorPhase.Closing?"문 닫히는 중":run.Doors?
@@ -314,8 +346,8 @@ namespace LineFour.Oido
             Label(43,h-101,83,55,Mathf.RoundToInt(run.Speed*3.6f).ToString("00"),38,Color.white,true);
             Label(104,h-92,73,34,"km/h",15,Pale);
             Label(178,h-103,260,34,action,15,Color.white,true);
-            Label(178,h-70,250,26,emergency?"비상 제동":run.Doors?"출입문 열림":brake?"제동":power?"가속":"타행 / 대기",14,Blue);
-            RectColor(43,h-44,113,4,new Color(.23f,.32f,.37f)); RectColor(43,h-44,113*run.Speed/18,4,Blue);
+            Label(178,h-70,250,26,emergency?"비상 제동":run.Doors?"출입문 열림":run.CurveBraking?"곡선 속도 제한 작동":brake?"제동":power?"가속":"타행 / 대기",14,Blue);
+            RectColor(43,h-44,113,4,new Color(.23f,.32f,.37f)); RectColor(43,h-44,113*run.Speed/RunState.MaxSpeed,4,Blue);
             RectColor(w-442,h-97,418,73,Ink);
             Label(w-425,h-94,397,31,View==2?"WASD 객실 이동    ↑ 가속    ↓ 제동    E 승하차":"W 가속     S 제동     Space 비상 제동     E 승하차",15,Color.white,true);
             Label(w-425,h-61,410,26,View==0?"우클릭 회전   휠 거리   F 초기화   C 운전석":"C 시점    우클릭 드래그 둘러보기    F 정면    R 재시작",14,Pale);

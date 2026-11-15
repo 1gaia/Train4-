@@ -1,82 +1,197 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
-using UnityEngine.SceneManagement;
 
 namespace LineFour.Oido
 {
-    [DefaultExecutionOrder(100)]
     public sealed class CurveRoute : MonoBehaviour
     {
-        struct Car { public Transform root; public Vector3 position; public Quaternion rotation; }
-        readonly List<Car> cars=new List<Car>();
-        readonly List<Mesh> generated=new List<Mesh>();
-        Line4Drive drive;
-        public static float Offset(float s)
+        const float TrainLength = 205.2f;
+        const float WarningDistance = 120;
+        const float HalfBogieSpacing = 6.55f; // The FBX axles are 5.5 m and 7.6 m from each car's pivot.
+        const string AlignmentResource = "OidoAlignment";
+
+        static TrackPath activePath;
+        public static TrackPath Path => activePath ??= CreatePath(Resources.Load<TrackAlignment>(AlignmentResource));
+
+        static TrackPath CreatePath(TrackAlignment alignment) =>
+            alignment ? alignment.Build() : new TrackPath(null);
+
+        public static void ResetPath() => activePath = null;
+
+        sealed class Car
         {
-            var stops=RouteSchedule.Stops;
-            int i=Array.BinarySearch(stops,s);
-            if(i>=0)return 0;
-            i=~i-1;
-            if(i<0 || i>=stops.Length-1)return 0;
-            float a=stops[i]+100,b=stops[i+1]-260;
-            if(s<=a || s>=b)return 0;
-            float u=(s-a)/(b-a),wave=Mathf.Sin(u*Mathf.PI);
-            return (i%2==0?1:-1)*Mathf.Min(24,(b-a)*(b-a)/5000)*wave*wave*wave*wave;
+            public LODGroup Lod;
+            public Vector3 Center;
+            public Quaternion RestRotation;
+            public Quaternion RouteRotation;
         }
-        public static Quaternion Heading(float s) =>
-            Quaternion.Euler(0,Mathf.Atan2(Offset(s+.25f)-Offset(s-.25f),.5f)*Mathf.Rad2Deg,0);
-        public static Vector3 Map(Vector3 source) =>
-            new Vector3(Offset(source.z),source.y,source.z)+Heading(source.z)*new Vector3(source.x,0,0);
-        void Start()
+
+        readonly List<Car> cars = new List<Car>();
+        readonly List<Mesh> generated = new List<Mesh>();
+
+        RailwayTrack railway;
+
+        public static Quaternion Heading(float source) => Path.Frame(source).Rotation;
+
+        public static Vector3 Map(Vector3 source) => Path.Frame(source.z).Point(source.x, source.y);
+
+        public static TrackFrame AtOffset(float source, float offset) => Path.AtTravel(Path.TravelAt(source) + offset);
+
+        public static bool TryCurveLimit(float source, out float remaining, out int limitKmh) =>
+            TryCurveLimitAtTravel(Path.TravelAt(source), out remaining, out limitKmh);
+
+        internal static bool TryCurveLimitAtTravel(float travel, out float remaining, out int limitKmh)
         {
-            drive=GetComponent<Line4Drive>();
-            foreach(var group in drive.consist.GetComponentsInChildren<LODGroup>()){
-                var t=group.transform;
-                cars.Add(new Car{root=t,position=t.position,rotation=t.rotation});
+            TrackPath path = Path;
+            int first = Mathf.Max(0, TrackPath.Section(path.SourceAt(travel - TrainLength)));
+            int last = Mathf.Min(RouteSchedule.Stops.Length - 2, TrackPath.Section(path.SourceAt(travel + WarningDistance)));
+            for (int section = first; section <= last; section++)
+            {
+                float start, end;
+                if (section == 0)
+                {
+                    start = path.FirstCurveStart;
+                    end = path.FirstCurveEnd;
+                    if (end <= start) continue;
+                }
+                else
+                {
+                    TrackPath.LaterCurveBounds(section, out start, out end);
+                    start = path.TravelAt(start);
+                    end = path.TravelAt(end);
+                }
+                if (travel > end + TrainLength || start - travel > WarningDistance) continue;
+                remaining = start - travel;
+                limitKmh = section == 0 ? 40 : 45;
+                return true;
             }
-            cars.Sort((a,b)=>b.position.z.CompareTo(a.position.z));
-            foreach(var renderer in drive.consist.GetComponentsInChildren<MeshRenderer>()){
-                if(!renderer.name.StartsWith("Console_"))continue;
-                var car=renderer.name.Contains("4954")?cars[9]:cars[0];
-                renderer.transform.SetParent(car.root,true);
+            remaining = 0;
+            limitKmh = 0;
+            return false;
+        }
+
+        public void Prepare(Line4Drive drive)
+        {
+            var alignment = Resources.Load<TrackAlignment>(AlignmentResource);
+            activePath = CreatePath(alignment);
+            var materials = alignment ? alignment.Materials : null;
+            bool generateTrack = materials != null && Array.TrueForAll(materials, material => material);
+            TrackFrame outbound = Path.OutboundTransform;
+            Vector3 nose = drive.consist.position;
+            foreach (var group in drive.consist.GetComponentsInChildren<LODGroup>())
+                cars.Add(new Car { Lod = group, Center = group.transform.position - nose, RestRotation = group.transform.rotation });
+            cars.Sort((a, b) => b.Center.z.CompareTo(a.Center.z));
+            if (cars.Count > 0)
+            {
+                foreach (var renderer in drive.consist.GetComponentsInChildren<MeshRenderer>())
+                {
+                    if (!renderer.name.StartsWith("Console_")) continue;
+                    var car = renderer.name.Contains("4954") ? cars[cars.Count - 1] : cars[0];
+                    renderer.transform.SetParent(car.Lod.transform, true);
+                }
+                for (int i = 0; i < cars.Count; i++)
+                {
+                    var riders = drive.consist.Find("Saloon occupants " + (i + 1));
+                    if (riders) riders.SetParent(cars[i].Lod.transform, true);
+                }
             }
-            for(int i=0;i<10;i++){
-                var riders=drive.consist.Find("Saloon occupants "+(i+1));
-                if(riders)riders.SetParent(cars[i].root,true);
-            }
-            foreach(var root in SceneManager.GetActiveScene().GetRootGameObjects()){
-                foreach(var filter in root.GetComponentsInChildren<MeshFilter>(true)){
-                    if(filter.transform.IsChildOf(drive.consist)||filter.GetComponentInParent<PassengerFlow>())continue;
-                    if(!filter.sharedMesh || !filter.sharedMesh.isReadable)continue;
-                    var source=filter.sharedMesh;
-                    var points=source.vertices;bool changed=false;
-                    for(int i=0;i<points.Length;i++){
-                        var world=filter.transform.TransformPoint(points[i]);
-                        var curved=Map(world);
-                        if((world-curved).sqrMagnitude>.000001f)changed=true;
-                        points[i]=filter.transform.InverseTransformPoint(curved);
+
+            foreach (var root in drive.gameObject.scene.GetRootGameObjects())
+            {
+                if (root == drive.gameObject || root == drive.consist.gameObject || root == drive.cabCamera.gameObject || root.GetComponent<Light>())
+                    continue;
+                bool routeRoot = root.name == "Oido - Geumjeong" || root.name == "Geumjeong - Jinjeop";
+                foreach (var filter in root.GetComponentsInChildren<MeshFilter>(true))
+                {
+                    if (generateTrack && routeRoot && IsLegacyTrack(filter))
+                    {
+                        filter.GetComponent<MeshRenderer>().enabled = false;
+                        continue;
                     }
-                    if(!changed)continue;
-                    var mesh=Instantiate(source);mesh.name=source.name+" curved";
-                    mesh.vertices=points;mesh.RecalculateNormals();mesh.RecalculateBounds();
-                    filter.sharedMesh=mesh;generated.Add(mesh);
+                    WarpMesh(filter);
                 }
+                // Beyond Jeongwang the old scenery uses one common local frame.
+                var t = root.transform;
+                t.SetPositionAndRotation(outbound.Position + outbound.Rotation * t.position, outbound.Rotation * t.rotation);
             }
+            if (generateTrack) railway = new RailwayTrack(Path, transform, materials);
+            ShowTrack(nose.z, drive.cabCamera.farClipPlane);
+            PlaceTrain(nose);
         }
-        void LateUpdate()
+
+        static bool IsLegacyTrack(MeshFilter filter) =>
+            (filter.name.StartsWith("Track_", StringComparison.Ordinal) ||
+             filter.name.StartsWith("Track ", StringComparison.Ordinal)) && filter.GetComponent<MeshRenderer>();
+
+        public void ShowTrack(float source, float viewDistance) => railway?.ShowAround(source, viewDistance);
+
+        void WarpMesh(MeshFilter filter)
         {
-            foreach(var car in cars){
-                var location=car.position+Vector3.forward*drive.run.Distance;
-                car.root.SetPositionAndRotation(Map(location),Heading(location.z)*car.rotation);
+            var source = filter.sharedMesh;
+            if (!source || !source.isReadable) return;
+            var points = source.vertices;
+            var localToWorld = filter.transform.localToWorldMatrix;
+            var worldToLocal = filter.transform.worldToLocalMatrix;
+            bool changed = false;
+            for (int i = 0; i < points.Length; i++)
+            {
+                Vector3 world = localToWorld.MultiplyPoint3x4(points[i]);
+                Vector3 curved = Path.SceneryPoint(world);
+                if ((world - curved).sqrMagnitude > .000001f) changed = true;
+                points[i] = worldToLocal.MultiplyPoint3x4(curved);
             }
-            // Boarding cohorts use route coordinates before being mapped to the curve.
-            foreach(var t in GetComponent<PassengerFlow>().GetComponentsInChildren<Transform>())
-                if(t.parent==drive.transform && t.name.StartsWith("Commuter")){
-                    var pos=t.position;var rot=t.rotation;
-                    t.SetPositionAndRotation(Map(pos),Heading(pos.z)*rot);
-                }
+            if (!changed) return;
+            var mesh = Instantiate(source);
+            mesh.name = source.name + " curved";
+            mesh.vertices = points;
+            mesh.RecalculateNormals();
+            mesh.RecalculateBounds();
+            filter.sharedMesh = mesh;
+            generated.Add(mesh);
         }
-        void OnDestroy(){foreach(var mesh in generated)Destroy(mesh);}
+
+        public void PlaceTrain(Vector3 nose)
+        {
+            float travel = Path.TravelAt(nose.z);
+            foreach (var car in cars)
+            {
+                float center = travel + car.Center.z;
+                float across = nose.x + car.Center.x;
+                float height = nose.y + car.Center.y;
+                Vector3 front = Path.AtTravel(center + HalfBogieSpacing).Point(across, height);
+                Vector3 rear = Path.AtTravel(center - HalfBogieSpacing).Point(across, height);
+                car.RouteRotation = Quaternion.LookRotation(front - rear);
+                car.Lod.transform.SetPositionAndRotation((front + rear) * .5f, car.RouteRotation * car.RestRotation);
+            }
+        }
+
+        public Vector3 CameraOnTrain(Vector3 nose, Vector3 eye, bool saloon, out Quaternion rotation)
+        {
+            Car nearest = null;
+            float distance = float.MaxValue;
+            foreach (var car in cars)
+            {
+                float gap = Mathf.Abs(eye.z - car.Center.z);
+                car.Lod.ForceLOD(saloon && gap < 26 ? 0 : -1);
+                if (gap >= distance) continue;
+                nearest = car;
+                distance = gap;
+            }
+            rotation = nearest != null ? nearest.RouteRotation : AtOffset(nose.z, eye.z).Rotation;
+            return nearest != null ? nearest.Lod.transform.position + rotation * (eye - nearest.Center) :
+                AtOffset(nose.z, eye.z).Point(nose.x + eye.x, nose.y + eye.y);
+        }
+
+        public void ResetLods()
+        {
+            foreach (var car in cars) car.Lod.ForceLOD(-1);
+        }
+
+        void OnDestroy()
+        {
+            railway?.Dispose();
+            foreach (var mesh in generated) Destroy(mesh);
+        }
     }
 }

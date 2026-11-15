@@ -1,0 +1,54 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: cd4b8f67d1344544b2d9f8fdf0845d0b, type: 3}
+  m_Name: OidoAlignment
+  m_EditorClassIdentifier: Assembly-CSharp::LineFour.Oido.TrackAlignment
+  knots:
+  - {x: 0.000, y: 0, z: 0.000}
+  - {x: 0.000, y: 0, z: 182.107}
+  - {x: -3.152, y: 0, z: 352.289}
+  - {x: -5.556, y: 0, z: 381.768}
+  - {x: -9.017, y: 0, z: 407.398}
+  - {x: -12.236, y: 0, z: 429.186}
+  - {x: -17.802, y: 0, z: 452.766}
+  - {x: -22.748, y: 0, z: 470.908}
+  - {x: -30.650, y: 0, z: 497.153}
+  - {x: -42.987, y: 0, z: 527.953}
+  - {x: -53.576, y: 0, z: 552.016}
+  - {x: -72.310, y: 0, z: 587.216}
+  - {x: -89.576, y: 0, z: 614.359}
+  - {x: -99.366, y: 0, z: 627.580}
+  - {x: -110.109, y: 0, z: 642.890}
+  - {x: -122.324, y: 0, z: 658.016}
+  - {x: -143.703, y: 0, z: 680.587}
+  - {x: -164.361, y: 0, z: 701.305}
+  - {x: -176.913, y: 0, z: 712.317}
+  - {x: -196.177, y: 0, z: 728.230}
+  - {x: -220.522, y: 0, z: 745.735}
+  - {x: -232.001, y: 0, z: 753.560}
+  - {x: -260.704, y: 0, z: 769.510}
+  - {x: -278.650, y: 0, z: 779.759}
+  - {x: -300.388, y: 0, z: 790.509}
+  - {x: -317.255, y: 0, z: 798.066}
+  - {x: -339.684, y: 0, z: 806.740}
+  - {x: -357.499, y: 0, z: 811.721}
+  - {x: -384.017, y: 0, z: 817.102}
+  - {x: -418.220, y: 0, z: 824.365}
+  - {x: -450.849, y: 0, z: 829.025}
+  - {x: -482.167, y: 0, z: 831.346}
+  - {x: -619.150, y: 0, z: 831.946}
+  - {x: -839.128, y: 0, z: 835.080}
+  sleeperSpacing: 0.6
+  foundation: {fileID: 2100000, guid: 5ca718659476ce2488818c73b652d978, type: 2}
+  ballast: {fileID: 2100000, guid: bd6421d666ebcac46ad56347426974dc, type: 2}
+  rail: {fileID: 2100000, guid: df65e65c5f7dd684291cf11dc515dd11, type: 2}
+  sleeper: {fileID: 2100000, guid: 3980b6bd538fb8345b81bd82268dde7c, type: 2}

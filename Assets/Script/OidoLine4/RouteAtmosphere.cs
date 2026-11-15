@@ -96,9 +96,11 @@ namespace LineFour.Oido
             rain.transform.rotation=Quaternion.Euler(90,0,0);
             cabin.enabled=!drive.Opening && drive.View!=0;
             cabin.intensity=Mathf.Lerp(.32f,1.35f,1-Daylight);
+            var path=CurveRoute.Path;
+            float travel=path.TravelAt(drive.run.Distance);
             for(int i=0;i<street.Length;i++){
-                float z=Mathf.Floor(drive.run.Distance/25)*25+(i/2-1)*25;
-                street[i].transform.position=CurveRoute.Map(new Vector3(i%2==0?-19:24.3f,5,z));
+                float distance=Mathf.Floor(travel/25)*25+(i/2-1)*25;
+                street[i].transform.position=path.AtTravel(distance).Point(i%2==0?-19:24.3f,5);
                 street[i].gameObject.SetActive(Daylight<.70f);
                 street[i].intensity=(1-Daylight)*2.5f;
             }

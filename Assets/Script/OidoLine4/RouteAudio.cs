@@ -38,7 +38,7 @@ namespace LineFour.Oido
             if(!started){announcements.Enqueue(welcome);started=true;}
             var r=drive.run;
             if(next!=r.Target){next=r.Target;announced=false;}
-            float remaining=RunState.Stops[r.Target]-r.Distance;
+            float remaining=r.Remaining;
             if(!announced && remaining<210 && remaining>=-RunState.Tolerance){
                 announcements.Enqueue(r.Target==50?terminal:stations[r.Target]);announced=true;SpokenStations++;
             }

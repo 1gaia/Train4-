@@ -7,6 +7,7 @@ using UnityEditor.SceneManagement;
 using UnityEngine;
 using LineFour.Oido;
 using Object=UnityEngine.Object;
+using OidoRunState=LineFour.Oido.RunState;
 
 namespace LineFour.Streets {
 public static class RouteUpgradeCheck {
@@ -27,6 +28,47 @@ public static class RouteUpgradeCheck {
     static int frame;
     [InitializeOnLoadMethod]static void Init(){EditorApplication.update+=Tick;}
     static void Check(bool pass,string message){if(!pass)throw new InvalidDataException(message);}
+
+    public static void CheckTrackGeometry(){
+        CurveRoute.ResetPath();
+        var path=CurveRoute.Path;
+        float stop=path.TravelAt(RouteSchedule.Stops[1]);
+        Check(Mathf.Abs(stop-1454)<4,"OpenStreetMap stop-to-stop distance");
+        Check(Mathf.Abs(Quaternion.Angle(path.AtTravel(0).Rotation,path.AtTravel(stop).Rotation)-89.2f)<.5f,"OpenStreetMap approach headings");
+        Check(path.FirstCurveStart>260 && path.FirstCurveEnd<1250,"Mapped confines of the Oido curve");
+        foreach(bool parallel in new[]{false,true}){
+            TrackMesh.SleeperRange(path,480,570,parallel,out int first,out int edge);
+            TrackMesh.SleeperRange(path,570,660,parallel,out int next,out int last);
+            Check(edge==next && first<edge && next<last,"Sleeper chunk seams");
+            for(int i=first;i<last-1;i++){
+                var a=path.AtTravel(i*path.SleeperSpacing,parallel);
+                var b=path.AtTravel((i+1)*path.SleeperSpacing,parallel);
+                Check(Mathf.Abs(Vector3.Distance(a.Position,b.Position)-.6f)<.006f,"Sleeper pitch on each track");
+                Check(Mathf.Abs(Vector3.Dot(a.Rotation*Vector3.right,(b.Position-a.Position).normalized))<.025f,"Sleeper normal on the bend");
+            }
+        }
+        var straight=new TrackPath(new[]{Vector3.zero,Vector3.forward*620});
+        var mesh=TrackMesh.Build(straight,0,9,out _);
+        try{
+            var points=mesh.vertices;
+            var heads=mesh.GetTriangles(2).Select(i=>points[i])
+                .Where(v=>Mathf.Abs(v.z)<.001f && Mathf.Abs(v.y-TrackMesh.RailTop)<.001f && Mathf.Abs(v.x)<1)
+                .Select(v=>v.x).Distinct().OrderBy(x=>x).ToArray();
+            Check(heads.Length==4 && Mathf.Abs(heads[2]-heads[1]-1.435f)<.0001f,"Inside gauge measured on mesh");
+            Check(mesh.GetTriangles(2).Any(i=>Mathf.Abs(points[i].y-TrackMesh.RailSeat)<.0001f) &&
+                Mathf.Abs(mesh.GetTriangles(3).Max(i=>points[i].y)-TrackMesh.RailSeat)<.0001f,"Rail foot and sleeper surface share height");
+        }finally{Object.DestroyImmediate(mesh);}
+
+        var grade=new TrackPath(new[]{Vector3.zero,new Vector3(0,0,100),new Vector3(-60,5,200),
+            new Vector3(-160,10,250),new Vector3(-300,10,250)});
+        var graded=grade.AtTravel(145);
+        Check(graded.Position.y>0 && (graded.Rotation*Vector3.forward).y>.01f,"Track frame follows grade");
+        var left=graded.Point(-TrackMesh.Gauge*.5f,TrackMesh.RailTop);
+        var right=graded.Point(TrackMesh.Gauge*.5f,TrackMesh.RailTop);
+        Check(Mathf.Abs(Vector3.Distance(left,right)-1.435f)<.0001f,"Gauge stays constant on a grade");
+        Check(Quaternion.Angle(grade.AtTravel(0).Rotation,grade.AtTravel(grade.FirstLength).Rotation)>89.9f,"Smooth right-angle turn");
+    }
+
     static void Tick(){
         int stage=SessionState.GetInt("RouteCheck",0);
         if(stage==0||!EditorApplication.isPlaying||Time.frameCount<Math.Max(25,frame))return;
@@ -35,11 +77,31 @@ public static class RouteUpgradeCheck {
             var weather=sim.GetComponent<RouteAtmosphere>();
             if(stage==1){
                 Check(sim.GetComponent<CurveRoute>() && weather && sim.GetComponent<RouteAudio>(),"Runtime components");
-                foreach(var s in RouteSchedule.Stops)Check(Mathf.Abs(CurveRoute.Offset(s))<.001f && Quaternion.Angle(CurveRoute.Heading(s),Quaternion.identity)<.01f,"Station alignment");
-                for(int i=0;i<50;i++){
-                    float a=RouteSchedule.Stops[i]+100,b=RouteSchedule.Stops[i+1]-260;
-                    Check(Mathf.Abs(CurveRoute.Offset((a+b)*.5f))>5,"Missing curve "+i);
+                CheckTrackGeometry();
+                foreach(var s in RouteSchedule.Stops){
+                    var across=CurveRoute.Map(new Vector3(5.3f,0,s))-CurveRoute.Map(new Vector3(0,0,s));
+                    Check(Vector3.Distance(across,CurveRoute.Heading(s)*Vector3.right*5.3f)<.01f,"Station alignment");
                 }
+                Check(Quaternion.Angle(CurveRoute.Heading(0),CurveRoute.Heading(RouteSchedule.Stops[1]))>60,"Oido to Jeongwang turning angle");
+                for(int i=1;i<50;i++){
+                    float a=RouteSchedule.Stops[i]+100,b=RouteSchedule.Stops[i+1]-260;
+                    var middle=CurveRoute.Map(Vector3.forward*((a+b)*.5f));
+                    var chord=(CurveRoute.Map(Vector3.forward*a)+CurveRoute.Map(Vector3.forward*b))*.5f;
+                    Check(Vector3.Distance(middle,chord)>5,"Missing curve "+i);
+                }
+                var speedCheck=new OidoRunState{Served=0,Target=1,Distance=0,Speed=OidoRunState.MaxSpeed};
+                var track=CurveRoute.Path;
+                float restrictedEnd=track.FirstCurveEnd+205.2f;
+                float travel=0;
+                bool approachBraking=false;
+                for(int step=0;step<5000 && travel<restrictedEnd+15;step++){
+                    speedCheck.Step(.05f,true,false,false);
+                    travel=track.TravelAt(speedCheck.Distance);
+                    if(travel<track.FirstCurveStart && speedCheck.CurveBraking)approachBraking=true;
+                    if(travel>=track.FirstCurveStart && travel<=restrictedEnd)
+                        Check(speedCheck.Speed*3.6f<=40.01f,"Oido curve limit across the whole train");
+                }
+                Check(approachBraking && travel>=restrictedEnd+15 && speedCheck.Speed*3.6f>40,"Curve approach braking and speed release");
                 Check(RouteAtmosphere.SelectWeather(.64f)==RouteWeather.Clear &&
                     RouteAtmosphere.SelectWeather(.70f)==RouteWeather.Overcast &&
                     RouteAtmosphere.SelectWeather(.9f)==RouteWeather.Rain,"Weighted weather");

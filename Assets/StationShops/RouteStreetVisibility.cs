@@ -9,10 +9,11 @@ namespace LineFour.Streets
     {
         Transform[] districts;
         Camera drivingCamera;
+        LineFour.Oido.Line4Drive drive;
         float lastZ=float.PositiveInfinity;
         void Start()
         {
-            var drive=FindFirstObjectByType<LineFour.Oido.Line4Drive>();
+            drive=FindAnyObjectByType<LineFour.Oido.Line4Drive>();
             drivingCamera=drive?drive.cabCamera:Camera.main;
             districts=new Transform[RouteSchedule.Stops.Length];
             for(int i=0;i<districts.Length;i++)districts[i]=transform.Find(RouteSchedule.Names[i]);
@@ -21,7 +22,7 @@ namespace LineFour.Streets
         void LateUpdate()
         {
             if(!drivingCamera || districts==null)return;
-            float z=drivingCamera.transform.position.z;
+            float z=drive?drive.run.Distance:drivingCamera.transform.position.z;
             if(Mathf.Abs(lastZ-z)<30)return;
             lastZ=z;
             float range=drivingCamera.farClipPlane+140;

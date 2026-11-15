@@ -16,10 +16,11 @@ namespace LineFour.Oido
             rearClosed = ClosedPositions(rearLeaves);
         }
 
-        public void SetOpening(float opening)
+        public void SetOpening(float opening, Vector3 trackDirection)
         {
-            MoveLeaves(frontLeaves, frontClosed, SlideDistance * opening);
-            MoveLeaves(rearLeaves, rearClosed, -SlideDistance * opening);
+            Vector3 slide = trackDirection * (SlideDistance * opening);
+            MoveLeaves(frontLeaves, frontClosed, slide);
+            MoveLeaves(rearLeaves, rearClosed, -slide);
         }
 
         static Vector3[] ClosedPositions(Transform[] leaves)
@@ -30,9 +31,8 @@ namespace LineFour.Oido
             return positions;
         }
 
-        static void MoveLeaves(Transform[] leaves, Vector3[] closed, float offset)
+        static void MoveLeaves(Transform[] leaves, Vector3[] closed, Vector3 slide)
         {
-            Vector3 slide = Vector3.forward * offset;
             for (int i = 0; i < leaves.Length; i++)
                 leaves[i].localPosition = closed[i] + leaves[i].parent.InverseTransformVector(slide);
         }

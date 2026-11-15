@@ -70,7 +70,9 @@ namespace LineFour.Oido
 
             float stop = RunState.Stops[r.Target];
             float previous = RunState.Stops[Mathf.Max(0, r.Target - 1)];
-            bool nearStop = Mathf.Abs(stop - r.Distance) < 250;
+            var path = CurveRoute.Path;
+            float trainTravel = path.TravelAt(train.position.z);
+            bool nearStop = Mathf.Abs(r.Remaining) < 250;
             bool doorsClosing = r.Phase == DoorPhase.Closing || r.Complete;
 
             for (int cohort = 0; cohort < 3; cohort++)
@@ -96,7 +98,7 @@ namespace LineFour.Oido
 
                     float doorZ = doors[Mathf.RoundToInt(j * (doors.Length - 1f) / (count - 1))];
                     float offset = (j % 3 - 1) * .18f;
-                    float trainZ = train.position.z + doorZ;
+                    float trainZ = path.SourceAt(trainTravel + doorZ);
                     var inside = new Vector3(-.64f, 1.40f, trainZ + .6f);
                     var doorway = new Vector3(-1.51f, 1.30f, trainZ);
                     var wait = new Vector3(-3.08f - .17f * (j % 3), 1.265f, stop + doorZ + .48f + offset);
@@ -128,7 +130,7 @@ namespace LineFour.Oido
                     }
 
                     position.y += Mathf.Abs(swing) * .0008f;
-                    person.root.SetPositionAndRotation(position, Quaternion.Euler(0, heading, 0));
+                    person.root.SetPositionAndRotation(CurveRoute.Map(position), CurveRoute.Heading(position.z) * Quaternion.Euler(0, heading, 0));
                     if(person.skin && person.skin.sharedMesh.blendShapeCount>=2){
                         person.skin.SetBlendShapeWeight(0,Mathf.Max(0,swing)*4);
                         person.skin.SetBlendShapeWeight(1,Mathf.Max(0,-swing)*4);
