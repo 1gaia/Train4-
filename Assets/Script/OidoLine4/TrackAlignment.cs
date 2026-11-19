@@ -52,7 +52,9 @@ namespace LineFour.Oido
         readonly TrackFrame arrival;
         readonly Quaternion inverseArrival;
         readonly MappedTrack mapped;
+        TrackStructures structures;
         public bool HasMappedTrack => mapped != null;
+        public TrackStructures Structures => structures ??= new TrackStructures(this);
         public float FirstLength => approachDistance[approachDistance.Length - 1];
         public float FirstCurveStart { get; }
         public float FirstCurveEnd { get; }

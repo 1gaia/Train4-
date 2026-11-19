@@ -1,0 +1,412 @@
+{
+  "source": "OpenStreetMap contributors, ODbL 1.0",
+  "relations": [
+    4744311,
+    13675921
+  ],
+  "checked": "2026-11-18",
+  "ranges": [
+    {
+      "section": 0,
+      "kind": 2,
+      "start": 0.5957809,
+      "end": 1.0
+    },
+    {
+      "section": 1,
+      "kind": 2,
+      "start": 0.0,
+      "end": 0.4518105
+    },
+    {
+      "section": 1,
+      "kind": 2,
+      "start": 0.6185767,
+      "end": 0.6393783
+    },
+    {
+      "section": 1,
+      "kind": 2,
+      "start": 0.8973116,
+      "end": 0.9007673
+    },
+    {
+      "section": 2,
+      "kind": 2,
+      "start": 0.8189682,
+      "end": 0.8396561
+    },
+    {
+      "section": 3,
+      "kind": 2,
+      "start": 0.6097475,
+      "end": 0.6170261
+    },
+    {
+      "section": 3,
+      "kind": 2,
+      "start": 0.860191,
+      "end": 1.0
+    },
+    {
+      "section": 4,
+      "kind": 2,
+      "start": 0.0,
+      "end": 1.0
+    },
+    {
+      "section": 5,
+      "kind": 2,
+      "start": 0.0,
+      "end": 1.0
+    },
+    {
+      "section": 6,
+      "kind": 2,
+      "start": 0.0,
+      "end": 0.3137519
+    },
+    {
+      "section": 6,
+      "kind": 2,
+      "start": 0.4500311,
+      "end": 0.4552731
+    },
+    {
+      "section": 6,
+      "kind": 2,
+      "start": 0.5837273,
+      "end": 0.6040621
+    },
+    {
+      "section": 7,
+      "kind": 2,
+      "start": 0.2676025,
+      "end": 0.9776526
+    },
+    {
+      "section": 8,
+      "kind": 1,
+      "start": 0.1484646,
+      "end": 0.4400125
+    },
+    {
+      "section": 8,
+      "kind": 2,
+      "start": 0.4400125,
+      "end": 0.5154345
+    },
+    {
+      "section": 8,
+      "kind": 1,
+      "start": 0.5154345,
+      "end": 0.570546
+    },
+    {
+      "section": 8,
+      "kind": 2,
+      "start": 0.6204474,
+      "end": 0.7881472
+    },
+    {
+      "section": 8,
+      "kind": 1,
+      "start": 0.8397666,
+      "end": 0.8981696
+    },
+    {
+      "section": 10,
+      "kind": 1,
+      "start": 0.4384369,
+      "end": 0.6631065
+    },
+    {
+      "section": 10,
+      "kind": 2,
+      "start": 0.6631065,
+      "end": 1.0
+    },
+    {
+      "section": 11,
+      "kind": 2,
+      "start": 0.0,
+      "end": 0.314724
+    },
+    {
+      "section": 11,
+      "kind": 2,
+      "start": 0.6188253,
+      "end": 1.0
+    },
+    {
+      "section": 12,
+      "kind": 2,
+      "start": 0.0,
+      "end": 0.746549
+    },
+    {
+      "section": 13,
+      "kind": 1,
+      "start": 0.1568975,
+      "end": 1.0
+    },
+    {
+      "section": 14,
+      "kind": 1,
+      "start": 0.0,
+      "end": 1.0
+    },
+    {
+      "section": 15,
+      "kind": 1,
+      "start": 0.0,
+      "end": 1.0
+    },
+    {
+      "section": 16,
+      "kind": 1,
+      "start": 0.0,
+      "end": 1.0
+    },
+    {
+      "section": 17,
+      "kind": 1,
+      "start": 0.0,
+      "end": 1.0
+    },
+    {
+      "section": 18,
+      "kind": 1,
+      "start": 0.0,
+      "end": 1.0
+    },
+    {
+      "section": 19,
+      "kind": 1,
+      "start": 0.0,
+      "end": 1.0
+    },
+    {
+      "section": 20,
+      "kind": 1,
+      "start": 0.0,
+      "end": 1.0
+    },
+    {
+      "section": 21,
+      "kind": 1,
+      "start": 0.0,
+      "end": 1.0
+    },
+    {
+      "section": 22,
+      "kind": 1,
+      "start": 0.0,
+      "end": 1.0
+    },
+    {
+      "section": 23,
+      "kind": 1,
+      "start": 0.0,
+      "end": 1.0
+    },
+    {
+      "section": 24,
+      "kind": 1,
+      "start": 0.0,
+      "end": 0.5451785
+    },
+    {
+      "section": 24,
+      "kind": 1,
+      "start": 0.6712357,
+      "end": 0.8499645
+    },
+    {
+      "section": 24,
+      "kind": 2,
+      "start": 0.8499645,
+      "end": 1.0
+    },
+    {
+      "section": 25,
+      "kind": 2,
+      "start": 0.0,
+      "end": 0.5557857
+    },
+    {
+      "section": 25,
+      "kind": 1,
+      "start": 0.6166299,
+      "end": 1.0
+    },
+    {
+      "section": 26,
+      "kind": 1,
+      "start": 0.0,
+      "end": 1.0
+    },
+    {
+      "section": 27,
+      "kind": 1,
+      "start": 0.0,
+      "end": 1.0
+    },
+    {
+      "section": 28,
+      "kind": 1,
+      "start": 0.0,
+      "end": 1.0
+    },
+    {
+      "section": 29,
+      "kind": 1,
+      "start": 0.0,
+      "end": 1.0
+    },
+    {
+      "section": 30,
+      "kind": 1,
+      "start": 0.0,
+      "end": 1.0
+    },
+    {
+      "section": 31,
+      "kind": 1,
+      "start": 0.0,
+      "end": 1.0
+    },
+    {
+      "section": 32,
+      "kind": 1,
+      "start": 0.0,
+      "end": 1.0
+    },
+    {
+      "section": 33,
+      "kind": 1,
+      "start": 0.0,
+      "end": 1.0
+    },
+    {
+      "section": 34,
+      "kind": 1,
+      "start": 0.0,
+      "end": 1.0
+    },
+    {
+      "section": 35,
+      "kind": 1,
+      "start": 0.0,
+      "end": 1.0
+    },
+    {
+      "section": 36,
+      "kind": 1,
+      "start": 0.0,
+      "end": 1.0
+    },
+    {
+      "section": 37,
+      "kind": 1,
+      "start": 0.0,
+      "end": 1.0
+    },
+    {
+      "section": 38,
+      "kind": 1,
+      "start": 0.0,
+      "end": 1.0
+    },
+    {
+      "section": 39,
+      "kind": 1,
+      "start": 0.0,
+      "end": 1.0
+    },
+    {
+      "section": 40,
+      "kind": 1,
+      "start": 0.0,
+      "end": 1.0
+    },
+    {
+      "section": 41,
+      "kind": 1,
+      "start": 0.0,
+      "end": 1.0
+    },
+    {
+      "section": 42,
+      "kind": 1,
+      "start": 0.0,
+      "end": 1.0
+    },
+    {
+      "section": 43,
+      "kind": 1,
+      "start": 0.0,
+      "end": 0.5784493
+    },
+    {
+      "section": 43,
+      "kind": 2,
+      "start": 0.5784493,
+      "end": 1.0
+    },
+    {
+      "section": 44,
+      "kind": 2,
+      "start": 0.0,
+      "end": 1.0
+    },
+    {
+      "section": 45,
+      "kind": 2,
+      "start": 0.0,
+      "end": 1.0
+    },
+    {
+      "section": 46,
+      "kind": 2,
+      "start": 0.0,
+      "end": 1.0
+    },
+    {
+      "section": 47,
+      "kind": 2,
+      "start": 0.0,
+      "end": 0.0327463
+    },
+    {
+      "section": 47,
+      "kind": 1,
+      "start": 0.0327463,
+      "end": 1.0
+    },
+    {
+      "section": 48,
+      "kind": 1,
+      "start": 0.0,
+      "end": 0.5984642
+    },
+    {
+      "section": 48,
+      "kind": 2,
+      "start": 0.5984642,
+      "end": 0.8322759
+    },
+    {
+      "section": 48,
+      "kind": 1,
+      "start": 0.8428178,
+      "end": 1.0
+    },
+    {
+      "section": 49,
+      "kind": 1,
+      "start": 0.0,
+      "end": 1.0
+    }
+  ]
+}

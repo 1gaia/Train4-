@@ -108,6 +108,11 @@ namespace LineFour.Oido
                 bool routeRoot = root.name == "Oido - Geumjeong" || root.name == "Geumjeong - Jinjeop";
                 foreach (var filter in root.GetComponentsInChildren<MeshFilter>(true))
                 {
+                    if (generateTrack && Path.Structures.HasMapData && IsLegacyCorridor(filter))
+                    {
+                        filter.GetComponent<MeshRenderer>().enabled = false;
+                        continue;
+                    }
                     if (generateTrack && routeRoot && IsLegacyTrack(filter))
                     {
                         filter.GetComponent<MeshRenderer>().enabled = false;
@@ -127,6 +132,12 @@ namespace LineFour.Oido
         static bool IsLegacyTrack(MeshFilter filter) =>
             (filter.name.StartsWith("Track_", StringComparison.Ordinal) ||
              filter.name.StartsWith("Track ", StringComparison.Ordinal)) && filter.GetComponent<MeshRenderer>();
+
+        static bool IsLegacyCorridor(MeshFilter filter) =>
+            (filter.name == "TunnelShared" || filter.name.StartsWith("Tunnel ", StringComparison.Ordinal) ||
+             filter.name == "Tunnel equipment" || filter.name == "Open railway" ||
+             filter.name.StartsWith("Wayside_", StringComparison.Ordinal) || filter.name.StartsWith("Wayside ", StringComparison.Ordinal))
+            && filter.GetComponent<MeshRenderer>();
 
         public void ShowTrack(float source, float viewDistance) => railway?.ShowAround(source, viewDistance);
 

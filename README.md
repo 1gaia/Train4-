@@ -14,6 +14,8 @@ Unity `6000.6.8f1`에서 확인한 프로젝트입니다. Unity Hub에서 프로
 | [RouteSchedule.cs](Assets/Script/OidoLine4/RouteSchedule.cs) | 역 번호·이름, 정차 위치, 터널 구간 |
 | [TrackAlignment.cs](Assets/Script/OidoLine4/TrackAlignment.cs) | 오이도–정왕 스플라인과 노선 거리 계산 |
 | [MappedTrack.cs](Assets/Script/OidoLine4/MappedTrack.cs) | 정왕–진접 선형, 역 사이의 실제 이동거리와 곡선 경고 구간 |
+| [TrackStructures.cs](Assets/Script/OidoLine4/TrackStructures.cs) | 위치에 따른 지상·터널·교량 구분 |
+| [RailwayCorridor.cs](Assets/Script/OidoLine4/RailwayCorridor.cs) | 선로 주변 터널·교량·전차선의 청크 메시 생성 |
 | [RailwayTrack.cs](Assets/Script/OidoLine4/RailwayTrack.cs) | 표준궤 레일·침목·도상 메시 생성과 주변 청크 관리 |
 | [PassengerFlow.cs](Assets/Script/OidoLine4/PassengerFlow.cs) | 승객 모델 생성, 대기·승차·하차 움직임 |
 | [PassengerFabric.shader](Assets/Script/OidoLine4/PassengerFabric.shader) | 승객 의상 셰이더 |
@@ -51,7 +53,11 @@ Project 창에서 [OidoAlignment](Assets/Resources/OidoAlignment.asset)를 선�
 
 평면 선형은 OpenStreetMap의 정차점과 연결된 선로에서 추출했습니다. 오이도–정왕의 기존 지도 기반 경로와 두 노선 관계에서 가져온 구간을 이었습니다. 기존 승강장, 10량 열차 및 스크린도어에 맞춰 정차점 앞 약 225m와 출발부 약 60m를 직선으로 맞추고 바깥쪽에서 지도 선형에 연결합니다. 게임에서 표시하는 거리는 이 경로를 따라 계산하므로 영업거리표와 차이가 있을 수 있습니다. CSV 좌표 데이터는 OpenStreetMap 기여자의 ODbL 1.0 자료를 바탕으로 합니다. [오이도–불암산 관계](https://www.openstreetmap.org/relation/4744311) · [사당–진접 관계](https://www.openstreetmap.org/relation/13675921) · [OpenStreetMap 기여자 및 이용 조건](https://www.openstreetmap.org/copyright) · [한국철도공사 노선 자료](https://info.korail.com/info/contents.do?key=1446)
 
-복선 중심 간격은 기존 승강장 규격인 5.3m입니다. 터널과 지상 시설은 기존 씬의 배치를 바탕으로 하며, 긴 터널 벽과 전차선은 새 곡선을 따라가도록 12m 단위로 분할합니다. 실제 분기기, 측량 종단고·캔트와 정확한 지하 진입점은 자료 대조가 더 필요한 부분입니다.
+복선 중심 간격은 기존 승강장 규격인 5.3m입니다. [Line4Structures.json](Assets/Resources/Line4Structures.json)에 공개 선로의 터널·교량 시작과 끝을 역간거리 비율로 저장합니다. `kind`의 값 1은 터널, 2는 교량입니다. 상록수–반월과 대야미–수리산의 짧은 터널, 동작대교, 쌍문–창동의 지상 전환, 별내별가람–오남의 지상 교량을 반영했습니다. 선로, 터널, 교량, 전차선은 동일한 경로와 청크 범위에서 생성됩니다.
+
+2026-11-18에 네이버 지도의 공개 역 안내에서 51개 역 이름을 확인했습니다. 네이버의 세부 지도 화면은 접근 제한으로 곡률을 직접 대조하지 못했습니다. 구조 경계 좌표는 OpenStreetMap에서 가져왔고, 동작대교와 쌍문–불암산 지상 구간 및 진접선 지상 교량은 지자체 공개 자료로 추가 확인했습니다. [네이버 동작역](https://pts.map.naver.com/end-subway/ends/web/431/home) · [네이버 이촌역](https://pts.map.naver.com/end-subway/ends/web/430/home) · [네이버 창동역](https://pts.map.naver.com/end-subway/ends/web/412/home) · [서울시 지상철도 자료](https://mas.smc.seoul.kr/attach/record/SEOUL/appendix/a11/A0060751.pdf) · [서울시 진접선 소개](https://mediahub.seoul.go.kr/news/article/newsArticlePrintPopup.do?articleNo=2004060)
+
+고저차, 캔트, 실제 분기기와 교량의 개별 형식은 현장 자료가 더 필요합니다. 교량 상판 폭과 교각 높이는 현재 게임 모델에 맞춘 값이고, 터널 진입점은 지도 선형과 직선화된 승강장 진입부 사이에서 오차가 생길 수 있습니다.
 
 ## 3. Blender 관련 파일
 

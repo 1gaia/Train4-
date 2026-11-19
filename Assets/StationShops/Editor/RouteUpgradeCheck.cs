@@ -100,6 +100,23 @@ public static class RouteUpgradeCheck {
         Check(initial-late.Remaining>.04f,"Low-speed movement at long chainage");
     }
 
+    public static void CheckMappedStructures(){
+        var path=CurveRoute.Path;
+        var structures=path.Structures;
+        Check(structures.HasMapData,"Mapped structure ranges are missing");
+        var stops=RouteSchedule.Stops;
+        Func<int,float,float> between=(station,fraction)=>Mathf.Lerp(path.TravelAt(stops[station]),path.TravelAt(stops[station+1]),fraction);
+        Check(structures.AtTravel(between(8,.25f))==TrackStructure.Tunnel,"Sangnoksu–Banwol first tunnel");
+        Check(structures.AtTravel(between(8,.48f))==TrackStructure.Bridge,"Sangnoksu–Banwol tunnel gap bridge");
+        Check(structures.AtTravel(between(10,.55f))==TrackStructure.Tunnel,"Daeyami–Surisan tunnel");
+        Check(structures.AtTravel(between(25,.3f))==TrackStructure.Bridge,"Dongjak bridge");
+        Check(structures.AtTravel(between(25,.8f))==TrackStructure.Tunnel,"Ichon tunnel entry");
+        Check(structures.AtTravel(between(43,.3f))==TrackStructure.Tunnel,"Ssangmun approach");
+        Check(structures.AtTravel(between(43,.8f))==TrackStructure.Bridge,"Changdong elevated approach");
+        Check(structures.AtTravel(between(48,.7f))==TrackStructure.Bridge,"Jinjeop line viaduct");
+        Check(structures.AtTravel(between(48,.9f))==TrackStructure.Tunnel,"Onam approach tunnel");
+    }
+
     static void Tick(){
         int stage=SessionState.GetInt("RouteCheck",0);
         if(stage==0||!EditorApplication.isPlaying||Time.frameCount<Math.Max(25,frame))return;
@@ -110,6 +127,7 @@ public static class RouteUpgradeCheck {
                 Check(sim.GetComponent<CurveRoute>() && weather && sim.GetComponent<RouteAudio>(),"Runtime components");
                 CheckTrackGeometry();
                 CheckMappedTrack();
+                CheckMappedStructures();
                 foreach(var s in RouteSchedule.Stops){
                     var across=CurveRoute.Map(new Vector3(5.3f,0,s))-CurveRoute.Map(new Vector3(0,0,s));
                     Check(Vector3.Distance(across,CurveRoute.Heading(s)*Vector3.right*5.3f)<.01f,"Station alignment");

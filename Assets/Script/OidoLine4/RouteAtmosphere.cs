@@ -89,15 +89,14 @@ namespace LineFour.Oido
             RenderSettings.fog=true;RenderSettings.fogMode=FogMode.ExponentialSquared;
             RenderSettings.fogColor=Color.Lerp(new Color(.04f,.055f,.10f),new Color(.60f,.69f,.75f),Daylight);
             RenderSettings.fogDensity=Mathf.Lerp(.0028f,.006f,RainAmount);
-            int section=System.Array.FindIndex(RouteSchedule.Stops,s=>s>=drive.run.Distance);
-            bool covered=section>=0&&RouteSchedule.Tunnel(section)&&drive.cabCamera.transform.position.y<7.4f;
+            var path=CurveRoute.Path;
+            float travel=path.TravelAt(drive.run.Distance);
+            bool covered=path.Structures.AtTravel(travel)==TrackStructure.Tunnel && drive.cabCamera.transform.position.y<7.4f;
             var emission=rain.emission;emission.rateOverTime=covered||drive.View==2?0:RainAmount*1100;
             rain.transform.position=drive.cabCamera.transform.position+Vector3.up*17+drive.cabCamera.transform.forward*10;
             rain.transform.rotation=Quaternion.Euler(90,0,0);
             cabin.enabled=!drive.Opening && drive.View!=0;
             cabin.intensity=Mathf.Lerp(.32f,1.35f,1-Daylight);
-            var path=CurveRoute.Path;
-            float travel=path.TravelAt(drive.run.Distance);
             for(int i=0;i<street.Length;i++){
                 float distance=Mathf.Floor(travel/25)*25+(i/2-1)*25;
                 street[i].transform.position=path.AtTravel(distance).Point(i%2==0?-19:24.3f,5);

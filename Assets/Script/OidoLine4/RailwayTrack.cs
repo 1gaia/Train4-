@@ -59,6 +59,17 @@ namespace LineFour.Oido
                 filter.sharedMesh = TrackMesh.Build(path, from, to, out Vector3 origin);
                 chunk.transform.position = origin;
                 filter.sharedMesh.UploadMeshData(true);
+                if (path.Structures.HasMapData)
+                {
+                    var corridor = new GameObject("Track environment", typeof(MeshFilter), typeof(MeshRenderer));
+                    corridor.transform.SetParent(chunk.transform, false);
+                    var environment = RailwayCorridor.Build(path, from, to);
+                    corridor.GetComponent<MeshFilter>().sharedMesh = environment;
+                    var environmentRenderer = corridor.GetComponent<MeshRenderer>();
+                    environmentRenderer.sharedMaterials = materials;
+                    environmentRenderer.shadowCastingMode = ShadowCastingMode.Off;
+                    environment.UploadMeshData(true);
+                }
                 chunks.Add(number, filter);
             }
         }
@@ -66,7 +77,8 @@ namespace LineFour.Oido
         static void Release(MeshFilter filter)
         {
             if (!filter) return;
-            UnityEngine.Object.Destroy(filter.sharedMesh);
+            foreach (var mesh in filter.GetComponentsInChildren<MeshFilter>())
+                UnityEngine.Object.Destroy(mesh.sharedMesh);
             UnityEngine.Object.Destroy(filter.gameObject);
         }
 
@@ -142,7 +154,7 @@ namespace LineFour.Oido
             return builder.Finish();
         }
 
-        sealed class Builder
+        internal sealed class Builder
         {
             readonly Vector3 origin;
             readonly List<Vector3> vertices = new List<Vector3>();
@@ -176,10 +188,14 @@ namespace LineFour.Oido
                 }
             }
 
-            internal void Sleeper(TrackFrame frame)
+            internal void Sleeper(TrackFrame frame) =>
+                Box(frame, new Vector3(0, (RailSeat + SleeperBottom) * .5f, 0),
+                    new Vector3(SleeperWidth, RailSeat - SleeperBottom, SleeperDepth), 3);
+
+            internal void Box(TrackFrame frame, Vector3 localCenter, Vector3 size, int material)
             {
-                Vector3 half = new Vector3(SleeperWidth, RailSeat - SleeperBottom, SleeperDepth) * .5f;
-                Vector3 center = frame.Point(0, (RailSeat + SleeperBottom) * .5f) - origin;
+                Vector3 half = size * .5f;
+                Vector3 center = frame.Position + frame.Rotation * localCenter - origin;
                 for (int axis = 0; axis < 3; axis++)
                 for (int sign = -1; sign <= 1; sign += 2)
                 {
@@ -193,7 +209,7 @@ namespace LineFour.Oido
                     vertices.Add(face + u + v);
                     vertices.Add(face - u + v);
                     for (int j = 0; j < 4; j++) normals.Add(n);
-                    Quad(faces[3], i, i + 1, i + 2, i + 3);
+                    Quad(faces[material], i, i + 1, i + 2, i + 3);
                 }
             }
 
